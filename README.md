@@ -9,11 +9,12 @@ Shared event intel for **Efi** and **Izia**: Luma official copy, Discord announc
 Clone this repo, open the folder as your workspace (or add it alongside Sprout in a multi-root window).
 
 ```bash
-git clone git@github.com:<your-org>/night-shift-mubit-2026-team.git
+git clone git@github.com:shahaman098/night-shift-mubit-2026-team.git
+# or: git clone https://github.com/shahaman098/night-shift-mubit-2026-team.git
 cd night-shift-mubit-2026-team
 ```
 
-Replace `<your-org>` with the GitHub owner after the repo is created (see **GitHub** below).
+**Repo:** https://github.com/shahaman098/night-shift-mubit-2026-team (private)
 
 ## Start here
 
