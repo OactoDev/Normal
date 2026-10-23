@@ -24,6 +24,10 @@ export function PlanReview({ plan, onApprove, isApproving }: PlanReviewProps) {
     plan.actions.map((a) => a.actionId)
   );
 
+  React.useEffect(() => {
+    setSelectedActionIds(plan.actions.map((a) => a.actionId));
+  }, [plan.planId]);
+
   const toggleAction = (id: string) => {
     if (selectedActionIds.includes(id)) {
       setSelectedActionIds(selectedActionIds.filter((item) => item !== id));

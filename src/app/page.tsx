@@ -33,6 +33,8 @@ export default function NormalOperationsCockpit() {
   const [isLoading, setIsLoading] = useState(true);
   const [isApproving, setIsApproving] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isAutoDemoRunning, setIsAutoDemoRunning] = useState(false);
+  const [autoDemoStep, setAutoDemoStep] = useState<string>("");
 
   // 1. Initial Load: fetch plan and simulator state
   const loadData = async () => {
@@ -154,6 +156,82 @@ export default function NormalOperationsCockpit() {
     }
   };
 
+  const handleRunAutonomousDemo = async () => {
+    setIsAutoDemoRunning(true);
+    try {
+      // Step 1: Inject Scenario
+      setAutoDemoStep("1/4: Injecting live delivery failure telemetry...");
+      setActiveTab("intelligence");
+      const simRes = await fetch("/api/intelligence/scenarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scenario: "delivery_delays", severity: 0.85 }),
+      });
+      const simData = await simRes.json();
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Step 2: Mubit AI Diagnosis
+      setAutoDemoStep("2/4: Calling Mubit proxy (gpt-6-luna) for root-cause diagnosis...");
+      const diagRes = await fetch("/api/intelligence/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          investigation: simData.investigation,
+          evidence: simData.evidence,
+        }),
+      });
+      const diagData = await diagRes.json();
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Step 3: Synthesize Recovery Plan & Switch to Review
+      setAutoDemoStep("3/4: Synthesizing recovery operations plan & gating approval...");
+      const planRes = await fetch("/api/intelligence/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          diagnosis: diagData.diagnosis,
+          evidence: simData.evidence,
+        }),
+      });
+      const planData = await planRes.json();
+      setPlan(planData.handoff.plan);
+      setActiveTab("review");
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Step 4: Approve Plan
+      setAutoDemoStep("4/4: Authorizing Plan & deploying Marketing, Customer Care & Storefront agents...");
+      const approveRes = await fetch(`/api/plans/${planData.handoff.plan.planId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planVersion: planData.handoff.plan.planVersion,
+          approvedActionIds: planData.handoff.plan.actions.map((a: any) => a.actionId),
+          reviewingPrincipal: "merchant_principal_aman",
+        }),
+      });
+      const approveData = await approveRes.json();
+      setApproval(approveData.approval);
+      setActiveTab("control");
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Step 5: Execute Approved Plan
+      const execRes = await fetch(`/api/plans/${planData.handoff.plan.planId}/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const execData = await execRes.json();
+      setExecutions(execData.executions || []);
+      setOutcomes(execData.outcomes || []);
+      await loadData();
+      setActiveTab("results");
+      setAutoDemoStep("🎉 Autonomous remediation complete! Live platforms updated & verified.");
+    } catch (e) {
+      console.error("Auto demo failed:", e);
+    } finally {
+      setIsAutoDemoRunning(false);
+    }
+  };
+
   if (isLoading || !plan) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400">
@@ -237,14 +315,64 @@ export default function NormalOperationsCockpit() {
             </button>
           </div>
 
-          <div className="hidden lg:flex items-center gap-3 font-mono text-xs text-slate-400">
-            <span className="flex items-center gap-1.5 text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Mubit Gateway Active
-            </span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRunAutonomousDemo}
+              disabled={isAutoDemoRunning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-amber-400 to-sky-400 hover:from-amber-300 hover:to-sky-300 text-slate-950 shadow-md shadow-sky-500/20 transition disabled:opacity-50"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isAutoDemoRunning ? "animate-spin" : ""}`} />
+              <span>{isAutoDemoRunning ? "Running Demo..." : "⚡ 30s Autonomous Demo"}</span>
+            </button>
+            <div className="hidden lg:flex items-center gap-3 font-mono text-xs text-slate-400 border-l border-slate-800 pl-3">
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Mubit Gateway Active
+              </span>
+            </div>
           </div>
         </div>
       </header>
+
+      {/* Live Store Telemetry Banner & Demo Status Bar */}
+      <div className="bg-slate-900 border-b border-slate-800/80 px-6 py-2.5">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-4 text-slate-400">
+            <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+              <span>🏬 Nova London Store</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span>Daily Rev:</span>
+              <strong className="text-white font-mono">£12,850</strong>
+              <span className="text-amber-400 text-[11px] font-mono">(-18%)</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span>Conversion:</span>
+              <strong className="text-white font-mono">1.8%</strong>
+            </span>
+            <span className="flex items-center gap-1">
+              <span>Carrier Breach:</span>
+              <strong className="text-amber-400 font-mono">16% late</strong>
+            </span>
+            <span className="flex items-center gap-1">
+              <span>Meta CAC:</span>
+              <strong className="text-amber-400 font-mono">£38.50</strong>
+            </span>
+          </div>
+
+          {autoDemoStep ? (
+            <div className="font-mono text-sky-400 bg-sky-950/80 border border-sky-500/30 px-3 py-1 rounded-full text-[11px] flex items-center gap-2 animate-pulse">
+              <Activity className="w-3 h-3 animate-spin" />
+              <span>{autoDemoStep}</span>
+            </div>
+          ) : (
+            <div className="text-[11px] font-mono text-slate-500 flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5 text-slate-400" />
+              <span>Autonomous Guardrails Active · Version-Locked Plans Only</span>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full space-y-6">
