@@ -8,9 +8,10 @@ globs:
 
 ## Before planning builds or changing scope
 
-1. Read [digest/LIVE.md](digest/LIVE.md) and [ACTION-ITEMS.md](ACTION-ITEMS.md).
+1. Read [digest/LIVE.md](digest/LIVE.md), [notifications/NOW.md](notifications/NOW.md), and [ACTION-ITEMS.md](ACTION-ITEMS.md).
 2. Check [sources/discord/inbox/](sources/discord/inbox/) for unmerged announcements.
 3. Use [RULES.md](RULES.md) and [SCHEDULE.md](SCHEDULE.md) for deadlines and Mubit constraints.
+4. For idea/planning/code review requests, use [planning/REVIEW-CHECKLIST.md](planning/REVIEW-CHECKLIST.md) and log changes in [DECISIONS.md](DECISIONS.md).
 
 ## Discord intel
 

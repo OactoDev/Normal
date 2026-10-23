@@ -25,6 +25,20 @@ cd night-shift-mubit-2026-team
 | [SCHEDULE.md](SCHEDULE.md) | Event timeline (update when hosts email changes) |
 | [RULES.md](RULES.md) | Submission and Mubit constraints |
 | [TEAM.md](TEAM.md) | Roles and comms |
+| [notifications/NOW.md](notifications/NOW.md) | Auto dashboard — idea/code/planning evaluation |
+| [planning/REVIEW-CHECKLIST.md](planning/REVIEW-CHECKLIST.md) | Deep review when nudged |
+
+## Persistent notifications
+
+macOS banners + `notifications/NOW.md` + `notifications/LOG.md` for schedule milestones, idea review, and Sprout code checkpoints.
+
+```bash
+cp .env.example .env   # set SPROUT_ROOT
+./scripts/notify-install.sh   # every 15 min via launchd
+./scripts/notify-status.sh
+```
+
+See [notifications/README.md](notifications/README.md). Snooze: `./scripts/notify-snooze.sh 120`.
 
 ## Discord inbox (manual)
 

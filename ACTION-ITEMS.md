@@ -8,6 +8,7 @@ Both edit this file. Check off when done; add owner initials.
 - [ ] Izia invited to private GitHub repo
 - [ ] Mubit API / base URL configured locally in Sprout (not committed here)
 - [ ] Pull latest Luma: `./scripts/pull-luma.sh`
+- [ ] Notifications: copy `.env.example` → `.env`, set `SPROUT_ROOT`, run `./scripts/notify-install.sh` (each laptop)
 
 ## During event
 

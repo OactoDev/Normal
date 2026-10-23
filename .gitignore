@@ -7,3 +7,7 @@
 *api_key*
 *.pem
 *.p12
+
+notifications/state.json
+notifications/launchd.out.log
+notifications/launchd.err.log

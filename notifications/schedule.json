@@ -1,0 +1,88 @@
+{
+  "timezone": "Europe/London",
+  "event_start": "2026-10-23T17:00:00",
+  "event_end": "2026-10-25T14:00:00",
+  "tick_comment": "Run via launchd every 15m; fires one-shots once and recurring on interval.",
+  "one_shots": [
+    {
+      "id": "check-in",
+      "at": "2026-10-23T17:00:00",
+      "title": "Night Shift — check in",
+      "body": "Discord → inbox. Pull Luma if schedule shifted. Fill TEAM.md handles."
+    },
+    {
+      "id": "kickoff",
+      "at": "2026-10-23T18:00:00",
+      "title": "Kickoff — capture rules",
+      "body": "Paste Mubit walkthrough + tracks into digest/LIVE.md before you code."
+    },
+    {
+      "id": "hacking-starts",
+      "at": "2026-10-23T19:30:00",
+      "title": "Hacking starts — lock the idea",
+      "body": "Run planning/REVIEW-CHECKLIST.md. Log choice in DECISIONS.md."
+    },
+    {
+      "id": "saturday-mid",
+      "at": "2026-10-24T12:00:00",
+      "title": "Saturday midpoint",
+      "body": "Mubit correction→update in demo path? Unchecked ACTION-ITEMS?"
+    },
+    {
+      "id": "saturday-night",
+      "at": "2026-10-24T22:00:00",
+      "title": "Late night — scope guard",
+      "body": "Re-read RULES.md. Cut scope before sleep; update DECISIONS if you pivoted."
+    },
+    {
+      "id": "sunday-breakfast",
+      "at": "2026-10-25T08:00:00",
+      "title": "Sunday — submission day",
+      "body": "Demo script + expo checklist. 2h until code freeze."
+    },
+    {
+      "id": "code-freeze",
+      "at": "2026-10-25T10:00:00",
+      "title": "CODE FREEZE — submit now",
+      "body": "Submissions close. Confirm format in LIVE.md / Discord."
+    },
+    {
+      "id": "expo",
+      "at": "2026-10-25T10:30:00",
+      "title": "Expo judging round 1",
+      "body": "Booth ready: live Mubit correction demo rehearsed."
+    },
+    {
+      "id": "final-demos",
+      "at": "2026-10-25T12:30:00",
+      "title": "Finalist demos",
+      "body": "On stage: usefulness + technical + Mubit usage in < time limit."
+    }
+  ],
+  "recurring": [
+    {
+      "id": "action-sync",
+      "every_minutes": 180,
+      "title": "Team hub sync",
+      "body": "Open notifications/NOW.md — clear ACTION-ITEMS or assign owner."
+    },
+    {
+      "id": "idea-review",
+      "every_minutes": 360,
+      "title": "Idea & track review",
+      "body": "Run planning/REVIEW-CHECKLIST.md — still scores on all 4 judging axes?"
+    },
+    {
+      "id": "code-checkpoint",
+      "every_minutes": 240,
+      "title": "Code checkpoint",
+      "body": "Sprout: commit, run app, verify LLM routes through Mubit."
+    },
+    {
+      "id": "discord-inbox",
+      "every_minutes": 120,
+      "title": "Discord sweep",
+      "body": "Any new host posts? inbox/ → LIVE.md → commit."
+    }
+  ]
+}
