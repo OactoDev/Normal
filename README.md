@@ -40,6 +40,19 @@ cp .env.example .env   # set SPROUT_ROOT
 
 See [notifications/README.md](notifications/README.md). Snooze: `./scripts/notify-snooze.sh 120`.
 
+## Cloud hub (Izia + Efi)
+
+Deployed on Cloudflare (**amanshah0844@gmail.com**): password-protected dashboard + cron evaluation.
+
+| | |
+|--|--|
+| URL | https://night-shift-team-hub.kiritokris.workers.dev |
+| Auth | `Authorization: Bearer $HUB_TOKEN` (in your local `.env`, share token privately) |
+| Sync | `./scripts/cloud-sync.sh` after local edits |
+| Deploy | `./scripts/cloud-deploy.sh` |
+
+Details: [cloudflare/README.md](cloudflare/README.md).
+
 ## Discord inbox (manual)
 
 1. Run `./scripts/new-inbox-note.sh "#announcements" "short-topic"` (or create a file under `sources/discord/inbox/`).

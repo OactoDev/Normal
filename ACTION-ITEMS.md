@@ -9,6 +9,7 @@ Both edit this file. Check off when done; add owner initials.
 - [ ] Mubit API / base URL configured locally in Sprout (not committed here)
 - [ ] Pull latest Luma: `./scripts/pull-luma.sh`
 - [ ] Notifications: copy `.env.example` → `.env`, set `SPROUT_ROOT`, run `./scripts/notify-install.sh` (each laptop)
+- [ ] Cloud hub: get `HUB_TOKEN` from Efi → `.env` → open workers URL; after edits run `./scripts/cloud-sync.sh`
 
 ## During event
 

@@ -1,0 +1,18 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "night-shift-team-hub",
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-10-23",
+	"account_id": "cf7590968e7d3a54091b3a94df6f1506",
+	"kv_namespaces": [
+		{
+			"binding": "HUB",
+			"id": "0f1f0192a5b14652b3a0a7aaa306bdb3"
+		}
+	],
+	"triggers": {
+		"crons": [
+			"*/15 * * * *"
+		]
+	}
+}

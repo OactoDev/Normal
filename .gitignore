@@ -11,3 +11,6 @@
 notifications/state.json
 notifications/launchd.out.log
 notifications/launchd.err.log
+
+cloudflare/node_modules/
+cloudflare/.wrangler/
