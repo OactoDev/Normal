@@ -8,9 +8,16 @@
 *.pem
 *.p12
 
+node_modules/
+.next/
+out/
+build/
+dist/
+
 notifications/state.json
 notifications/launchd.out.log
 notifications/launchd.err.log
 
 cloudflare/node_modules/
 cloudflare/.wrangler/
+

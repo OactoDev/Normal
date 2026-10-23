@@ -37,7 +37,8 @@ _(Paste summaries here; link to `sources/discord/inbox/` or `archive/` files.)_
 
 _(Confirm on Discord; do not treat as binding until pasted.)_
 
-- **Model card:** upload session JSONL via Discord `/upload your@email.com`; post card on X/LinkedIn; links in `#modelcards`. _(Prizes: confirm in inbox.)_
+- **Model card (Side Quest 1):** JSONL → `/upload your@email.com` → email card → X (@MubitLabs) + LinkedIn → `#modelcards`. **Bonus:** route Claude/Codex via Mubit base URL + key. **Privacy:** keys/secrets redacted, not stored (per Eldar edit). **Prizes:** Switch 2 / $100 / $25 credits. [Full Discord text](../sources/discord/inbox/2026-10-23-0821-everyone-side-quest-1-model-card.md).
+- **Venue WiFi (Eldar 18:07):** `MubitHackathon` / `Hackathon2026` _(same inbox file)._
 
 ## Mubit technical reminders
 
