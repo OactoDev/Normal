@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+*token*
+*api-key*
+*api_key*
+*.pem
+*.p12

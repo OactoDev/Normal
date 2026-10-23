@@ -1,0 +1,33 @@
+---
+description: Night Shift team hub — read LIVE digest and inbox workflow before planning
+globs:
+  - "**/*"
+---
+
+# Night Shift team hub (Efi + Izia)
+
+## Before planning builds or changing scope
+
+1. Read [digest/LIVE.md](digest/LIVE.md) and [ACTION-ITEMS.md](ACTION-ITEMS.md).
+2. Check [sources/discord/inbox/](sources/discord/inbox/) for unmerged announcements.
+3. Use [RULES.md](RULES.md) and [SCHEDULE.md](SCHEDULE.md) for deadlines and Mubit constraints.
+
+## Discord intel
+
+- Do not invent Discord announcements. If it is not in `digest/LIVE.md` or `sources/discord/`, say it is unknown and suggest capturing via `scripts/new-inbox-note.sh`.
+- After merging Discord content, remind humans to run `scripts/merge-inbox.sh` when LIVE is updated.
+
+## Secrets
+
+- Never commit API keys, Mubit tokens, or `.env` contents.
+- Redact other hackers' private emails in pasted Discord content.
+
+## Repo boundaries
+
+- This repo is **event intel and coordination**, not the Flutter app.
+- Application code lives in Sprout (separate folder/repo).
+- Do not reference or copy Hackathon Engine / HackForge research paths unless the user explicitly asks.
+
+## Luma
+
+- Refresh with `scripts/pull-luma.sh`; update SCHEDULE and digest when the official page or host email changes.
