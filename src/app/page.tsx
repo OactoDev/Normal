@@ -5,6 +5,7 @@ import { ProposedPlanT, PlanApprovalT, AgentMissionT, ActionExecutionT, ActionOu
 import { PlanReview } from "../components/plan-review";
 import { AgentMissionControl } from "../components/agent-mission-control";
 import { ExecutionResults } from "../components/execution-results";
+import { IntelligencePanel } from "../components/intelligence-panel";
 import { DispatchedEmail, SimulatedBanner } from "../simulator/state";
 import {
   Activity,
@@ -14,10 +15,11 @@ import {
   ArrowRight,
   Shield,
   Layers,
+  Cpu,
 } from "lucide-react";
 
 export default function NormalOperationsCockpit() {
-  const [activeTab, setActiveTab] = useState<"review" | "control" | "results">("review");
+  const [activeTab, setActiveTab] = useState<"intelligence" | "review" | "control" | "results">("intelligence");
   const [plan, setPlan] = useState<ProposedPlanT | null>(null);
   const [approval, setApproval] = useState<PlanApprovalT | null>(null);
   const [missions, setMissions] = useState<AgentMissionT[]>([]);
@@ -135,6 +137,23 @@ export default function NormalOperationsCockpit() {
     setIsLoading(false);
   };
 
+  const handlePlanGenerated = async (newPlanId: string) => {
+    try {
+      const res = await fetch(`/api/plans/${newPlanId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPlan(data.plan);
+        setApproval(null);
+        setExecutions([]);
+        setMissions([]);
+        setOutcomes([]);
+        setActiveTab("review");
+      }
+    } catch (e) {
+      console.error("Error loading generated plan:", e);
+    }
+  };
+
   if (isLoading || !plan) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400">
@@ -173,8 +192,19 @@ export default function NormalOperationsCockpit() {
           {/* Navigation Stages */}
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl">
             <button
+              onClick={() => setActiveTab("intelligence")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                activeTab === "intelligence"
+                  ? "bg-purple-500 text-slate-950 shadow"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              <span>0. Intelligence Studio</span>
+            </button>
+            <button
               onClick={() => setActiveTab("review")}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
                 activeTab === "review"
                   ? "bg-sky-500 text-slate-950 shadow"
                   : "text-slate-400 hover:text-slate-200"
@@ -185,7 +215,7 @@ export default function NormalOperationsCockpit() {
             </button>
             <button
               onClick={() => setActiveTab("control")}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
                 activeTab === "control"
                   ? "bg-sky-500 text-slate-950 shadow"
                   : "text-slate-400 hover:text-slate-200"
@@ -196,7 +226,7 @@ export default function NormalOperationsCockpit() {
             </button>
             <button
               onClick={() => setActiveTab("results")}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
                 activeTab === "results"
                   ? "bg-sky-500 text-slate-950 shadow"
                   : "text-slate-400 hover:text-slate-200"
@@ -218,6 +248,10 @@ export default function NormalOperationsCockpit() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full space-y-6">
+        {activeTab === "intelligence" && (
+          <IntelligencePanel onPlanGenerated={handlePlanGenerated} />
+        )}
+
         {activeTab === "review" && (
           <PlanReview
             plan={plan}

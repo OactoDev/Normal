@@ -6,6 +6,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const handoffRecord = orchestrator.getHandoff(id);
+  if (handoffRecord) {
+    return NextResponse.json(handoffRecord);
+  }
+
   const plan = orchestrator.getPlan(id);
 
   if (!plan) {

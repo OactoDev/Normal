@@ -1,6 +1,6 @@
 # NOW — auto-generated dashboard
 
-**Updated:** 2026-10-23T23:16:37+01:00 (London)
+**Updated:** 2026-10-23T23:31:38+01:00 (London)
 
 ## Evaluation
 

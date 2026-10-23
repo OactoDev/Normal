@@ -8,6 +8,7 @@
     "start": "next start",
     "test:contracts": "tsx src/tests/contracts.test.ts",
     "test:orchestrator": "tsx src/tests/orchestrator.test.ts",
+    "test:intelligence": "tsx src/tests/intelligence.test.ts",
     "test:mubit": "tsx src/tests/mubit-email-generation.test.ts"
   },
   "dependencies": {

@@ -5,6 +5,7 @@ import {
   ActionExecutionT,
   ActionOutcomeT,
   ActionProposalT,
+  PlanHandoffT,
   AgentMission,
   ActionOutcome,
 } from "../contracts";
@@ -25,6 +26,7 @@ export interface OrchestratorRunResult {
 
 class AgentOrchestrator {
   private plans: Map<string, ProposedPlanT> = new Map();
+  private handoffs: Map<string, PlanHandoffT> = new Map();
   private approvals: Map<string, PlanApprovalT> = new Map();
   private missions: Map<string, AgentMissionT[]> = new Map();
   private executions: Map<string, ActionExecutionT[]> = new Map();
@@ -127,6 +129,15 @@ class AgentOrchestrator {
 
   public savePlan(plan: ProposedPlanT): void {
     this.plans.set(plan.planId, plan);
+  }
+
+  public saveHandoff(handoff: PlanHandoffT): void {
+    this.handoffs.set(handoff.plan.planId, handoff);
+    this.plans.set(handoff.plan.planId, handoff.plan);
+  }
+
+  public getHandoff(planId: string): PlanHandoffT | undefined {
+    return this.handoffs.get(planId);
   }
 
   public getApproval(planId: string): PlanApprovalT | undefined {
