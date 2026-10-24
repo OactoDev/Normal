@@ -1,0 +1,99 @@
+flowchart TD
+    S[Simulator or External API] --> I[Ingestion connector]
+    I --> V[Zod validation + deduplication]
+    V --> B[(MongoDB business_events)]
+    B --> M[Metric snapshots]
+    M --> A{Anomaly?}
+    A -->|Yes| INV[Investigation]
+    INV --> EV[Evidence retrieval]
+    EV --> L[Mubit gateway - recurring diagnosis]
+    L --> DI[Diagnosis schema validation]
+    DI --> P[Mubit-routed solution planner]
+    P --> PLAN[(ProposedPlan v1)]
+    PLAN --> H[Partner approval UI]
+    H -->|Approved plan version and action IDs| ORCH[Mission orchestrator]
+    ORCH --> API[Restricted action APIs]
+    API --> S
+    API --> OUT[(ActionExecution / ActionOutcome)]
+    DI --> COR[(ModelCorrection in MongoDB)]
+    COR -.->|Only if supported| TRAIN[Mubit feedback + adapter training]
+    L -.-> TRAIN
+    TRAIN --> BENCH[Independent unseen-case evaluation]
+
+%% ---------------------------------------------------------------------------
+%% Implemented architecture (Nike simulator stage). Dashed edges are private.
+%% ---------------------------------------------------------------------------
+flowchart LR
+  subgraph Reference["Reference data service"]
+    NK[nike.com/gb + investors.nike.com\npublic pages, cited & dated] --> RC[src/reference/nike-catalogue.ts\nverified cache + fallback]
+    RC --> RP[(reference_products\nreference_financials)]
+  end
+
+  subgraph Sim["Simulator engine (src/simulator)"]
+    BOOT[bootstrap: seeded world] --> ENG[TickEngine\nads → sessions → orders → fulfilment → reviews]
+    SCN[scenarios.ts\nmechanistic params] -.-> ENG
+    RNG[sfc32 RNG state] <--> ENG
+    RUN[runtime.ts\nlease lock · idempotent ticks · chunked persistence]
+    ENG --> RUN
+    CHK[checkout.ts\ntransaction + atomic stock]
+  end
+
+  subgraph Ing["Ingestion service"]
+    ING[ingestBatch\nZod strict · eventBusinessRules · tenant scope\nunique (businessId, connectorId, sourceRecordId)]
+  end
+
+  subgraph Mongo["MongoDB normal_dev"]
+    ST[(simulator_state)]
+    DOM[(simulated_* domain records)]
+    EV[(business_events\nimmutable ledger)]
+    MS[(metric_snapshots)]
+    GT[(simulator_ground_truth\nPRIVATE)]
+    RCPT[(action_receipts)]
+  end
+
+  subgraph An["Analytics service"]
+    AGG[computeSnapshots\n$facet aggregation · dedupe ad windows · null rates]
+  end
+
+  subgraph UI["Next.js app"]
+    STORE[/demo-store\nstorefront + checkout/]
+    CR[/dev/simulator\ncontrol room/]
+  end
+
+  subgraph API["Route handlers"]
+    DEVAPI[/api/dev/simulator/*]
+    INGAPI[/api/ingest/events]
+    MET[/api/metrics, /api/metrics/breakdown]
+    SHOP[/api/demo-store/*]
+    PLANS[/api/plans/:id → PlanHandoff]
+  end
+
+  subgraph Partner["Partner adapters (src/adapters)"]
+    AD[setDailyBudget · sendDelayNotice · publishBanner\nread-backs · verifyAction]
+  end
+
+  RP --> BOOT
+  RUN --> ST
+  RUN --> DOM
+  RUN --> ING
+  CHK --> DOM
+  CHK --> ING
+  ING --> EV
+  EV --> AGG --> MS
+  RUN -.-> GT
+  DEVAPI --> RUN
+  INGAPI --> ING
+  MET --> AGG
+  SHOP --> CHK
+  SHOP --> DOM
+  CR --> DEVAPI
+  CR --> MET
+  STORE --> SHOP
+  AD --> DOM
+  AD --> ING
+  AD --> RCPT
+  FUT[Future: anomaly → evidence → Mubit diagnosis → ProposedPlan] --> PLANS
+  EV --> FUT
+  MS --> FUT
+  PLANS --> EXEC[Partner: approval + orchestration]
+  EXEC --> AD
