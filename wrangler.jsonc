@@ -17,8 +17,7 @@
     "NORMAL_STORE": "d1",
     "PUBLIC_DEMO": "1",
     "EMAIL_PROVIDER": "demo",
-    "MUBIT_BASE_URL": "https://api.mubit.ai/openai/v1",
-    "MUBIT_MODEL": "gemini-4-argon"
+    "MUBIT_BASE_URL": "https://api.mubit.ai/gemini/v1beta"
   },
   "observability": {
     "enabled": true

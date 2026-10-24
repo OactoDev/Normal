@@ -8,7 +8,7 @@ Live app: https://normal-ops.kiritokris.workers.dev
 - `NORMAL_STORE=d1` enables persistent records with atomic claims and optimistic concurrency checks.
 - `PUBLIC_DEMO=1` isolates D1 collections by an HTTP-only browser session cookie. The middleware overwrites the internal session header.
 - `EMAIL_PROVIDER=demo` records simulated sends without SMTP or a mail API. Local `.env` files, CSV data and mail-provider credentials are not bundled or uploaded.
-- Diagnosis and email drafting call real Mubit-routed `gpt-6-luna`. `MUBIT_API_KEY` is stored as a Cloudflare Worker secret. The model, base URL and real `x-middleware-request-id` are preserved; diagnosis failures return an explicit 502/503 instead of heuristic results. Sapling checks also call the real provider.
+- Diagnosis and email drafting call real Mubit-routed `gemini-4-argon` on Mubit's native Gemini route. It is the only model the app uses. `MUBIT_API_KEY` is stored as a Cloudflare Worker secret. The model, base URL and real `x-middleware-request-id` are preserved; diagnosis failures return an explicit 502/503 instead of heuristic results. Sapling checks also call the real provider.
 
 ## Redeploy
 
