@@ -37,7 +37,7 @@ const decor = () => {
 };
 function card(ending=false) {
   const repo=(config.repo||'').replace(/^https?:\/\//,'');
-  return `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><style>body{margin:0;height:100vh;display:flex;flex-direction:column;justify-content:center;padding:0 120px;background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif}h1{font-size:56px;font-weight:600;margin:0 0 16px}p{font-size:24px;color:#94a3b8;margin:0 0 8px}</style></head><body><h1>Normal + Banyan Sapling</h1>${ending?`<p>${escape(repo)}</p>`:`<p>${escape(config.tagline||'')}</p>`}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><style>body{margin:0;height:100vh;display:flex;flex-direction:column;justify-content:center;padding:0 120px;background:#f8fafc;color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif}h1{font-size:56px;font-weight:600;margin:0 0 16px}p{font-size:24px;color:#64748b;margin:0 0 8px}</style></head><body><h1>Normal + Banyan Sapling</h1>${ending?`<p>${escape(repo)}</p>`:`<p>${escape(config.tagline||'')}</p>`}</body></html>`;
 }
 (async()=>{
   const {chromium}=playwright();

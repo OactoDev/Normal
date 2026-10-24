@@ -32,13 +32,13 @@
     {
       "id": "gate",
       "label": "THE POLICY GATE",
-      "narration": "That means everything depends on the diagnosis being right. So before a plan is built, we send Sapling three things. The merchant's policy, the evidence the AI cited, and the AI's claim. Sapling's verdict decides whether a plan can be built at all.",
+      "narration": "That means everything depends on the diagnosis being right. So before a plan is built, we send Sapling three things. The merchant's policy, the evidence the AI cited, and the AI's claim. Sapling's verdict decides whether a plan can be built at all. Sapling doesn't write anything. It returns a label and a confidence, and that's all we need to gate on.",
       "action": {
         "type": "scroll",
         "testId": "sapling-policy-gate"
       },
       "caption": "Merchant policy + cited evidence + AI claim \u2192 Sapling verdict",
-      "holdSeconds": 1.4
+      "holdSeconds": 2.5
     },
     {
       "id": "supported",
@@ -51,7 +51,7 @@
         "showReview": true
       },
       "caption": "14 late orders \u00b7 at least 10 required \u00b7 supported",
-      "holdSeconds": 2.2
+      "holdSeconds": 2.5
     },
     {
       "id": "blocked",
@@ -64,12 +64,12 @@
         "hoverBlocked": true
       },
       "caption": "8 late orders \u00b7 below the threshold \u00b7 plan blocked",
-      "holdSeconds": 1.4
+      "holdSeconds": 2.5
     },
     {
       "id": "stress",
       "label": "FOUR LIVE CHECKS",
-      "narration": "We also run four fixed test cases against the same policy. Enough late orders is supported. Too few is a violation. Ad data with no delivery records is insufficient information. And two reports that contradict each other come back as inconsistent context.",
+      "narration": "We also run four fixed test cases against the same policy. Each one is a real call to the Sapling API, run in parallel. Enough late orders is supported. Too few is a violation. Ad data with no delivery records is insufficient information. And two reports that contradict each other come back as inconsistent context.",
       "action": {
         "type": "click",
         "testId": "sapling-stress-button",
@@ -77,7 +77,7 @@
         "focusTestId": "sapling-stress-results"
       },
       "caption": "Supported \u00b7 violation \u00b7 insufficient information \u00b7 inconsistent context",
-      "holdSeconds": 1.4
+      "holdSeconds": 2.5
     },
     {
       "id": "close",
@@ -90,7 +90,7 @@
       "holdSeconds": 1
     }
   ],
-  "speechSpeed": 0.9,
+  "speechSpeed": 1.0,
   "plain": true,
   "voiceSettings": {
     "stability": 0.72,

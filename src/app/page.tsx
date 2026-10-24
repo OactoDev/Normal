@@ -39,21 +39,30 @@ export default function NormalOperationsCockpit() {
     try { await post("/api/sim/reset",{planId}); await load(planId); await refresh(); setTab("review"); }
     catch(e) { setError(String(e)); } finally { setBusy(false); }
   }
-  return <div className="min-h-screen bg-slate-950 text-slate-100">
-    <header className="border-b border-slate-800 p-5 flex flex-wrap items-center justify-between gap-4">
-      <div><h1 className="text-xl font-bold text-sky-400">Normal</h1><p className="text-xs text-slate-400">Permission-controlled operations · Nike business simulation</p></div>
-      <nav className="flex flex-wrap gap-3">{["intelligence","review","control","results"].map(t => <button key={t} onClick={()=>setTab(t)} className={tab===t ? "text-sky-400 font-bold" : "text-slate-400"}>{t === "control" ? "Mission Control" : t[0].toUpperCase()+t.slice(1)}</button>)}</nav>
-      <label className="text-xs">Demo principal <select aria-label="Principal" className="bg-slate-800 p-2 rounded" value={principal} onChange={e=>setPrincipal(e.target.value)}><option value="merchant_owner_01">Merchant owner</option><option value="ops_viewer">Ops viewer (read-only)</option></select></label>
-      <a href="/ads" className="text-sky-400">Ads Manager ↗</a><a href="/store" className="text-sky-400">Store ↗</a>
+  const tabs: [string, string][] = [["intelligence","Intelligence"],["review","Review"],["control","Mission Control"],["results","Results"]];
+  return <div className="min-h-screen bg-slate-50 text-slate-900">
+    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+      <div className="max-w-7xl mx-auto px-6 h-14 flex items-center gap-8">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="h-7 w-7 rounded-md bg-slate-900 text-white grid place-items-center text-sm font-semibold">N</div>
+          <span className="font-semibold tracking-tight">Normal</span>
+        </div>
+        <nav className="flex h-full items-stretch gap-6 text-sm">{tabs.map(([t,label]) => <button key={t} onClick={()=>setTab(t)} className={`border-b-2 -mb-px ${tab===t ? "border-slate-900 text-slate-900 font-medium" : "border-transparent text-slate-500 hover:text-slate-900"}`}>{label}</button>)}</nav>
+        <div className="ml-auto flex items-center gap-4 text-sm">
+          <a href="/ads" className="text-slate-500 hover:text-slate-900">Ads Manager</a>
+          <a href="/store" className="text-slate-500 hover:text-slate-900">Store</a>
+          <select aria-label="Principal" className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700" value={principal} onChange={e=>setPrincipal(e.target.value)}><option value="merchant_owner_01">Merchant owner</option><option value="ops_viewer">Ops viewer (read-only)</option></select>
+        </div>
+      </div>
     </header>
-    <main className="max-w-7xl mx-auto p-6 space-y-6">
-      <p className="text-xs text-slate-400">{planId} · {data?.planStatus || handoff?.plan.status} {data?.needsAttention && "· Needs attention"}</p>
-      {(error || pollError) && <div role="alert" className="border border-red-500 rounded p-4 text-red-300">{error || pollError}</div>}
+    <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <p className="text-xs text-slate-500">Nike store simulation · {planId} · {data?.planStatus || handoff?.plan.status} {data?.needsAttention && "· Needs attention"}</p>
+      {(error || pollError) && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || pollError}</div>}
       {tab === "intelligence" && <IntelligencePanel onPlanGenerated={async id=>{setPlanId(id);setTab("review");}} />}
       {tab === "review" && (handoff ? <PlanReview key={`${planId}:${handoff.plan.planVersion}`} handoff={handoff} approval={data?.approval && data.approval.planVersion === handoff.plan.planVersion ? data.approval : null} onApprove={approve} isApproving={busy} /> : <p>Loading plan…</p>)}
       {tab === "control" && <AgentMissionControl data={data} busy={busy} onExecute={execute} onReset={reset} />}
       {tab === "results" && <ExecutionResults data={data} />}
     </main>
-    <footer className="p-6 text-center text-xs text-slate-500">Ads and storefront are simulated. Email goes only to the configured test inbox. Demo header identities are not production authentication.</footer>
+    <footer className="p-6 text-center text-xs text-slate-500">{process.env.NEXT_PUBLIC_PUBLIC_DEMO === "1" ? "Public demo · Ads, storefront changes and email are simulated. Your browser has its own demo session." : "Ads and storefront are simulated. Email goes only to the configured test inbox. Demo header identities are not production authentication."}</footer>
   </div>;
 }
