@@ -12,7 +12,7 @@ async function runIntelligenceTests() {
 
   // 1. Telemetry Simulation
   console.log("1. Injecting 'delivery_delays' scenario into simulator...");
-  const simState = telemetrySimulator.injectScenario("delivery_delays", 0.85);
+  const simState = await telemetrySimulator.injectScenario("delivery_delays", 0.85);
   console.log(` - Generated ${simState.events.length} initial events`);
   console.log(` - Active scenario: ${simState.run.activeScenario}`);
   if (simState.events.length < 5) {

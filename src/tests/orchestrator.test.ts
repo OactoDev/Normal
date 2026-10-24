@@ -6,6 +6,7 @@ import { resetDemo } from "../simulator/reset";
 import fs from "node:fs";
 import path from "node:path";
 import * as store from "../store/repos";
+import { reconcileDeliveries } from "../execution/delivery-monitor";
 
 (process.env as Record<string, string>).NODE_ENV = "test";
 process.env.EMAIL_PROVIDER = "memory";
@@ -210,6 +211,38 @@ async function emailRetrySafety() {
   ok("an ambiguous email send is never retried automatically");
 }
 
+async function deliveryMonitoring() {
+  await resetDemo("plan_001");
+  const h = await loadPlanHandoff("plan_001");
+  const { approval } = await approve(h, ["act_email_001"]);
+  await execute("plan_001", approval.approvalId);
+  // Make the memory-provider sends look like real Resend sends that are still awaiting a delivery report.
+  for (const e of await store.emails.find({ planId: "plan_001" })) await store.emails.update(e.key, { $set: { provider: "resend", providerOperationId: `re_${e.orderId}` } });
+  // Read the store directly: snapshot() would also start a background re-check against the real provider.
+  const execution = (await store.executions.find({ planId: "plan_001", actionId: "act_email_001" }))[0];
+  const outcomeFor = () => store.outcomes.findOne(execution.executionId);
+
+  const calls: string[] = [];
+  const t0 = Date.now();
+  await reconcileDeliveries("plan_001", async id => { calls.push(id); return id === "re_ord_001" ? "delivered" : "accepted"; }, t0);
+  assert(calls.length === 2, "both accepted sends were checked");
+  assert((await store.emails.findOne("plan_001:v1:act_email_001:ord_001")).status === "delivered", "ord_001 promoted to delivered");
+  assert((await outcomeFor()).status === "monitoring", "outcome stays monitoring while one send is unconfirmed");
+  ok("a partly delivered batch stays in monitoring");
+
+  await reconcileDeliveries("plan_001", async id => { calls.push(id); return "delivered"; }, t0 + 1000);
+  assert(calls.length === 2, "no re-check inside the 10s throttle");
+  ok("delivery re-checks are throttled");
+
+  await reconcileDeliveries("plan_001", async id => { calls.push(id); return "delivered"; }, t0 + 11_000);
+  assert(calls.length === 3 && calls[2] === "re_ord_002", "only the still-accepted send is re-checked");
+  const outcome = await outcomeFor();
+  assert(outcome.status === "verified" && outcome.summary.startsWith("2/2 messages delivered"), `outcome promoted: ${outcome.status} ${outcome.summary}`);
+  const delivered = (await store.events.find()).filter(e => e.type === "customer.message_sent" && e.payload.status === "delivered");
+  assert(delivered.length === 2, "one delivered event per message");
+  ok("all sends delivered promotes the ledger and ActionOutcome to verified");
+}
+
 async function main() {
   const csv = process.env.NORMAL_STORE === "csv";
   console.log(`=== Execution module tests (${csv ? `CSV files in ${path.resolve(process.env.NORMAL_DATA_DIR || "data")}` : "in-memory store"}) ===`);
@@ -224,6 +257,7 @@ async function main() {
   await partialApproval();
   await dependencies();
   await emailRetrySafety();
+  await deliveryMonitoring();
   console.log(`🎉 ${passed} checks passed`);
   process.exit(0);
 }

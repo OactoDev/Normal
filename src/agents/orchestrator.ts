@@ -4,6 +4,7 @@ import * as store from "../store/repos";
 import { loadPlanHandoff, seedDefaultPlan, storedHandoff } from "../execution/load-plan";
 import { assertApprovalExecutable } from "../execution/validate-approval";
 import { readiness } from "../execution/dependencies";
+import { reconcileDeliveries } from "../execution/delivery-monitor";
 import { ToolError, stepDelay } from "../execution/retry-policy";
 import { log } from "../execution/execute-action";
 import { marketingAgent } from "./marketing-agent";
@@ -25,6 +26,9 @@ class AgentOrchestrator {
     await store.handoffs.claim(key,h);
   }
   async getApproval(id: string) {
+    const plan = await this.getPlan(id);
+    const head = await store.approvalHeads.findOne(`${id}:v${plan.planVersion}`);
+    if (head) return (await store.approvals.findOne(head.approvalId))?.approval ?? null;
     const records = (await store.approvals.find()).filter(r => r.approval.planId === id).sort((a,b) => b.approval.decidedAt.localeCompare(a.approval.decidedAt));
     return records[0]?.approval ?? null;
   }
@@ -32,8 +36,10 @@ class AgentOrchestrator {
   getMissions(id: string) { return store.missions.find({ planId: id }); }
   async getOutcomes(id: string) { const ids = new Set((await this.getExecutions(id)).map(e => e.executionId)); return (await store.outcomes.find()).filter(o => ids.has(o.executionId)); }
   async snapshot(id: string) {
+    // Fire-and-forget so a slow provider never delays the poll; the next poll shows any confirmed delivery.
+    void reconcileDeliveries(id).catch(e => console.error("[delivery-monitor]", e));
     const plan = await this.getPlan(id), executions = await this.getExecutions(id);
-    return { planId: id, planStatus: plan.status, needsAttention: executions.some(e => ["failed","cancelled"].includes(e.status)), approval: await this.getApproval(id), missions: await this.getMissions(id), executions, outcomes: await this.getOutcomes(id), details: await store.details.find({ planId: id }), logs: (await store.logs.find({ planId: id })).sort((a,b) => a.at.localeCompare(b.at)) };
+    return { planId: id, planStatus: plan.status, needsAttention: executions.some(e => ["failed","cancelled"].includes(e.status)), approval: await this.getApproval(id), missions: await this.getMissions(id), executions, outcomes: await this.getOutcomes(id), emailSends: await store.emails.find({ planId: id }), details: await store.details.find({ planId: id }), logs: (await store.logs.find({ planId: id })).sort((a,b) => a.at.localeCompare(b.at)) };
   }
   async start(planId: string, approvalId: string, actionIds?: string[], principal = "", dispatch: (work: () => Promise<void>) => void = work => { void work().catch(console.error); }) {
     const h = await loadPlanHandoff(planId), record = await store.approvals.findOne(approvalId);
@@ -78,9 +84,9 @@ class AgentOrchestrator {
       if (!queued.length) break;
       let progress = false;
       await Promise.all(queued.map(async execution => {
-        const action = h.plan.actions.find(a => a.actionId === execution.actionId)!;
+        const action = h.plan.actions.find(a => a.actionId === execution.actionId);
         const approval = await store.approvals.findOne(execution.approvalId);
-        const ready = readiness(action, approval.approval.approvedActionIds, byAction);
+        const ready = action && approval ? readiness(action, approval.approval.approvedActionIds, byAction) : "APPROVAL_INVALID";
         if (ready === "waiting") return;
         let code: string = ready === "ready" ? undefined : ready;
         try {

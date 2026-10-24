@@ -1,6 +1,6 @@
 # NOW — auto-generated dashboard
 
-**Updated:** 2026-10-24T01:31:41+01:00 (London)
+**Updated:** 2026-10-24T11:56:50+01:00 (London)
 
 ## Evaluation
 
@@ -14,6 +14,10 @@
 1. Clear or assign **9** open items in [ACTION-ITEMS.md](../ACTION-ITEMS.md)
 1. Merge Discord → [digest/LIVE.md](../digest/LIVE.md)
 1. Open Sprout — verify Mubit base URL + one correction demo path
+
+## Fired this tick
+
+- **Discord sweep** — Any new host posts? inbox/ → LIVE.md → commit.
 
 ## Standing links
 

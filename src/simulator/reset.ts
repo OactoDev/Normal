@@ -10,6 +10,7 @@ export async function resetDemo(planId: string) {
   for (const r of await s.logs.find({planId})) await s.logs.remove(r.logId);
   for (const r of await s.missions.find({planId})) await s.missions.remove(r.missionId);
   for (const r of await s.approvals.find()) if (r.approval.planId === planId) await s.approvals.remove(r.approval.approvalId);
+  for (const r of await s.approvalHeads.find({planId})) await s.approvalHeads.remove(`${planId}:v${r.planVersion}`);
   for (const r of await s.emails.find({planId})) await s.emails.remove(r.key);
   for (const r of await s.events.find()) if (r.payload.planId === planId) await s.events.remove(r.eventId);
   // The fixture plan is reseeded with fresh windows; generated plans are kept and reopened for approval.
@@ -20,6 +21,7 @@ export async function resetDemo(planId: string) {
   }
   // Shared demo platforms are explicitly reset to baseline.
   await s.campaigns.remove("campaign_A");
+  for (const m of await s.adMetrics.find()) await s.adMetrics.remove(m.metricId);
   for (const b of await s.storefront.find()) await s.storefront.remove(b.bannerId);
   await seedSimulator();
 }

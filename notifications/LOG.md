@@ -14,3 +14,12 @@ Persistent record of nudges (macOS banners + evaluation summaries). Newest entri
 | 2026-10-24 00:16 | action-sync | Team hub sync |
 | 2026-10-24 00:16 | idea-review | Idea & track review |
 | 2026-10-24 00:16 | discord-inbox | Discord sweep |
+| 2026-10-24 02:16 | code-checkpoint | Code checkpoint |
+| 2026-10-24 02:16 | discord-inbox | Discord sweep |
+| 2026-10-24 03:16 | action-sync | Team hub sync |
+| 2026-10-24 04:16 | discord-inbox | Discord sweep |
+| 2026-10-24 09:53 | action-sync | Team hub sync |
+| 2026-10-24 09:53 | idea-review | Idea & track review |
+| 2026-10-24 09:53 | code-checkpoint | Code checkpoint |
+| 2026-10-24 09:53 | discord-inbox | Discord sweep |
+| 2026-10-24 11:56 | discord-inbox | Discord sweep |

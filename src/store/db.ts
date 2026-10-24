@@ -4,7 +4,8 @@ import { z } from "zod";
 
 // Each collection is one CSV file (`key,json`) under NORMAL_DATA_DIR (default ./data).
 // Under NODE_ENV=test (unless NORMAL_STORE=csv), or NORMAL_STORE=memory, records stay in process memory so tests never touch disk.
-// Every operation is synchronous read-modify-write, so claim/compareAndSet stay atomic within a Node process.
+// Writes use an exclusive per-table lock across Node processes and atomic rename.
+// A crashed writer leaves a lock: fail closed rather than risk duplicate sends.
 const globals = globalThis as typeof globalThis & { normalMemory?: Map<string, Map<string, unknown>> };
 
 const useMemory = () => process.env.NORMAL_STORE === "memory" || (process.env.NODE_ENV === "test" && process.env.NORMAL_STORE !== "csv");
@@ -54,6 +55,22 @@ class CsvTable {
     fs.writeFileSync(tmp, body);
     fs.renameSync(tmp, this.file);
   }
+  mutate<R>(work: (map: Map<string, unknown>) => R): R {
+    if (useMemory()) return work(this.load());
+    fs.mkdirSync(dataDir(), { recursive: true });
+    const lock = `${this.file}.lock`, deadline = Date.now() + 5000;
+    let fd: number;
+    while (fd === undefined) {
+      try { fd = fs.openSync(lock, "wx"); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (Date.now() >= deadline) throw new Error(`CSV table locked: ${this.name}. Stop writers and inspect ${lock} before recovery.`);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
+    }
+    try { return work(this.load()); }
+    finally { fs.closeSync(fd); fs.unlinkSync(lock); }
+  }
 }
 
 const matches = (doc: object, filter: object) => Object.entries(filter).every(([k, v]) => (doc as Record<string, unknown>)[k] === v);
@@ -70,36 +87,41 @@ export class Repo<T extends object> {
   }
   async insert(key: string, input: T) {
     const value = this.schema.parse(input);
-    const map = this.table.load();
+    return this.table.mutate(map => {
     if (map.has(key)) throw new Error(`Duplicate ${key}`);
     map.set(key, structuredClone(value)); this.table.save(map);
     return value;
+    });
   }
   async update(key: string, update: { $set: Partial<T> }) {
-    const map = this.table.load();
+    return this.table.mutate(map => {
     const merged = { ...(map.get(key) as T | undefined), ...update.$set };
-    const value = { ...merged, ...this.schema.parse(merged) };
+    const value = this.schema.parse(merged);
     map.set(key, structuredClone(value)); this.table.save(map);
     return value;
+    });
   }
   async claim(key: string, input: T): Promise<boolean> {
     const value = this.schema.parse(input);
-    const map = this.table.load();
+    return this.table.mutate(map => {
     if (map.has(key)) return false;
     map.set(key, structuredClone(value)); this.table.save(map);
     return true;
+    });
   }
   async remove(key: string) {
-    const map = this.table.load();
+    return this.table.mutate(map => {
     if (map.delete(key)) this.table.save(map);
+    });
   }
   async compareAndSet(key: string, expected: Partial<T>, changes: Partial<T>): Promise<boolean> {
-    const map = this.table.load();
+    return this.table.mutate(map => {
     const old = map.get(key) as T | undefined;
     if (!old || !matches(old, expected)) return false;
     const merged = { ...old, ...changes };
-    const value = { ...merged, ...this.schema.parse(merged) };
+    const value = this.schema.parse(merged);
     map.set(key, structuredClone(value)); this.table.save(map);
     return true;
+    });
   }
 }

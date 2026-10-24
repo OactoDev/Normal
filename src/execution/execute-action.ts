@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { ActionProposalT, ActionExecutionT } from "../contracts";
-import { executions, details, logs, outcomes } from "../store/repos";
+import { executions, details, logs, outcomes, emails } from "../store/repos";
 import { executeSetDailyBudget } from "../tools/ads";
 import { executeSendDelayNotice } from "../tools/email";
 import { executePublishBanner } from "../tools/storefront";
@@ -60,6 +60,10 @@ export async function executeAction(action: ActionProposalT, context: ExecuteAct
     await outcomes.update(execution.executionId, { $set: { outcomeId: `out_${execution.executionId}`, executionId: execution.executionId, actionId: action.actionId, status: action.actionType === "customer.send_delay_notice" ? "monitoring" : "verified", observedMetricSnapshotIds: [], summary: verified.verification, observedAt: new Date().toISOString() } });
     await log(execution,"succeeded: read-back verified");
   } catch (e) {
+    if (action.actionType === "customer.send_delay_notice") {
+      const sends = (await emails.find({ planId: context.planId, actionId: action.actionId })).filter(e=>e.key.startsWith(`${key}:`));
+      if (sends.length) await details.update(execution.executionId, { $set: { executionId: execution.executionId, planId: context.planId, payload: { emails: sends } } });
+    }
     const error = e instanceof ToolError ? e : new ToolError("TOOL_FAILED", e instanceof Error ? e.message : String(e));
     execution = await executions.update(key, { $set: { status: "failed", finishedAt: new Date().toISOString(), error: { code: error.code, message: error.message, retryable: error.retryable && !error.sideEffectPossible } } });
     await outcomes.update(execution.executionId, { $set: { outcomeId: `out_${execution.executionId}`, executionId: execution.executionId, actionId: action.actionId, status: "not_verified", observedMetricSnapshotIds: [], summary: error.message, observedAt: new Date().toISOString() } });

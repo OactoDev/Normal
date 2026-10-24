@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const simState = telemetrySimulator.injectScenario(validatedScenario.data, severity);
+    const simState = await telemetrySimulator.injectScenario(validatedScenario.data, severity);
     const detection = anomalyDetector.analyzeEvents(simState.events);
     const investigationPacket = evidenceCollector.assembleInvestigation(
       detection.anomalies,

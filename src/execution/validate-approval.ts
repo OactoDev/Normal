@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { PlanApproval, PlanHandoffT } from "../contracts";
-import { approvals, handoffs, executions, ApprovalRecordT } from "../store/repos";
+import { approvals, approvalHeads, handoffs, executions, ApprovalRecordT } from "../store/repos";
 import { authorize, validatePolicy } from "./policy";
 import { ToolError } from "./retry-policy";
 import { validateGraph } from "./dependencies";
@@ -27,6 +27,7 @@ export async function createApproval(h: PlanHandoffT, raw: unknown, principal: s
   if (!Number.isFinite(ttl) || ttl <= 0) throw new ToolError("CONFIG_ERROR", "Invalid approval TTL");
   const record: ApprovalRecordT = { approval, _meta: { businessId: h.plan.businessId, expiresAt: new Date(Math.min(Date.now()+ttl*60000, Date.parse(h.plan.expiresAt))).toISOString(), note: input.changeRequestNote } };
   await approvals.insert(approval.approvalId, record);
+  await approvalHeads.update(`${h.plan.planId}:v${h.plan.planVersion}`, { $set: { planId: h.plan.planId, planVersion: h.plan.planVersion, approvalId: approval.approvalId } });
   h.plan.status = input.decision;
   await handoffs.update(`${h.plan.planId}:v${h.plan.planVersion}`, { $set: h });
   return { approval, plan: h.plan };
@@ -37,5 +38,7 @@ export async function assertApprovalExecutable(h: PlanHandoffT, record: Approval
   if (record.approval.reviewingPrincipal !== principal) throw new ToolError("PRINCIPAL_MISMATCH", "Approval belongs to another principal", false, false, 403);
   if (Date.parse(record._meta.expiresAt) <= Date.now()) throw new ToolError("APPROVAL_EXPIRED", "Approval expired", false, false, 409);
   if (record.approval.decision === "rejected") throw new ToolError("NOT_APPROVED", "Plan rejected", false, false, 409);
+  const head = await approvalHeads.findOne(`${h.plan.planId}:v${h.plan.planVersion}`);
+  if (head && head.approvalId !== record.approval.approvalId) throw new ToolError("APPROVAL_SUPERSEDED", "A newer decision replaced this approval", false, false, 409);
   await validate(h, record.approval, principal);
 }

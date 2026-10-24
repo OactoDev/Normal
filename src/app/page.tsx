@@ -41,7 +41,7 @@ export default function NormalOperationsCockpit() {
   }
   return <div className="min-h-screen bg-slate-950 text-slate-100">
     <header className="border-b border-slate-800 p-5 flex flex-wrap items-center justify-between gap-4">
-      <div><h1 className="text-xl font-bold text-sky-400">Normal</h1><p className="text-xs text-slate-400">Permission-controlled operations · Nova Store</p></div>
+      <div><h1 className="text-xl font-bold text-sky-400">Normal</h1><p className="text-xs text-slate-400">Permission-controlled operations · Nike business simulation</p></div>
       <nav className="flex flex-wrap gap-3">{["intelligence","review","control","results"].map(t => <button key={t} onClick={()=>setTab(t)} className={tab===t ? "text-sky-400 font-bold" : "text-slate-400"}>{t === "control" ? "Mission Control" : t[0].toUpperCase()+t.slice(1)}</button>)}</nav>
       <label className="text-xs">Demo principal <select aria-label="Principal" className="bg-slate-800 p-2 rounded" value={principal} onChange={e=>setPrincipal(e.target.value)}><option value="merchant_owner_01">Merchant owner</option><option value="ops_viewer">Ops viewer (read-only)</option></select></label>
       <a href="/ads" className="text-sky-400">Ads Manager ↗</a><a href="/store" className="text-sky-400">Store ↗</a>
