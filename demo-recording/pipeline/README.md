@@ -14,9 +14,13 @@ The example scene file produces a 1:44 Sapling demo. It never approves or execut
 Requirements: Python 3 with Pillow; Node.js + Playwright; ffmpeg/ffprobe; a running
 Normal app at `http://localhost:3100`. The example matches the `normal-demo`
 launcher in the workspace's `.claude/launch.json`. Browser capture uses a temporary
-headless Chrome context; no sign-in is needed for the local app. Set `EXE` for
+headless Chromium context; no sign-in is needed for the local app. Set `EXE` for
 another installed Chromium executable and `PLAYWRIGHT_MODULE` for another installed
-Playwright package. The default macOS Chrome executable is auto-selected.
+Playwright package. The recorder prefers the highest available locally cached Chromium headless shell,
+then the macOS Chrome executable. Cache discovery supports macOS arm64/x64 and common Linux/Windows layouts,
+and honors `PLAYWRIGHT_BROWSERS_PATH`. The shell avoids a native Chrome screencast
+geometry issue that can add a gray strip despite correct page screenshots.
+Use a compatible headless shell when overriding `EXE`.
 
 Secrets are read only from `~/.config/elevenlabs/kris_api_key`; the key is never
 written into the repository, printed, or placed on the command line. Speech uses
@@ -29,7 +33,7 @@ and `Wav2Lip/checkpoints/wav2lip_gan.pth`. The included compatibility wrapper en
 Apple MPS, handles current librosa, accelerates detection at 360 px while preserving
 720 px output, and passes ffmpeg arguments safely for paths containing spaces.
 Set `WAV2LIP_HOME`, `WAV2LIP_PYTHON`, or `WAV2LIP_WRAPPER` to override installation
-paths. A centered720 px crop is made forward+reverse before inference.
+paths. A centered 720 px crop is made forward+reverse before inference.
 
 Use `--no-lipsync` for a still portrait on the title/end cards only, or
 `--synced-face /absolute/path/to/synced_face.mp4` to reuse already generated lip sync.

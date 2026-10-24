@@ -37,19 +37,33 @@ const decor = () => {
 };
 function card(ending=false) {
   const repo=(config.repo||'').replace(/^https?:\/\//,'');
-  return `<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0;color:#f0f7f7;background:#060d14;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;overflow:hidden}.mesh{position:fixed;inset:0;background:radial-gradient(ellipse at 20% 20%,#104c4555,transparent 58%),radial-gradient(ellipse at 80% 100%,#0e355355,transparent 60%)}.grid{position:fixed;inset:0;background-image:linear-gradient(#ffffff05 1px,transparent 1px),linear-gradient(90deg,#ffffff05 1px,transparent 1px);background-size:48px 48px}.main{position:relative;padding:115px 72px;max-width:1000px}.eyebrow{font-family:monospace;color:#52e0b3;font-size:14px;letter-spacing:3px;text-transform:uppercase}.brand{font-size:68px;letter-spacing:-3px;line-height:1.06;font-weight:700;margin:28px 0 24px}.times{font-weight:300;color:#52e0b3}.subtitle{font-size:28px;color:#bac9d0;line-height:1.35;max-width:760px}.rule{margin:35px 0;height:1px;background:linear-gradient(90deg,#52e0b3aa,transparent);width:650px}.detail{font-family:monospace;color:#6b9097;font-size:16px;line-height:1.6}.chip{display:inline-flex;gap:10px;border:1px solid #265449;background:#0d2520;border-radius:30px;padding:10px 17px;color:#5de8ba;font-family:monospace;font-size:13px}.dot{width:8px;height:8px;border-radius:50%;background:#5de8ba;margin-top:4px;box-shadow:0 0 12px #52e0b388}.aside{position:fixed;right:40px;top:38px;color:#53727a;font-family:monospace;font-size:11px;letter-spacing:2px}</style></head><body><div class="mesh"></div><div class="grid"></div><div class="aside">NIGHT SHIFT / POLICY CHALLENGE</div><main class="main"><div class="eyebrow">${ending?'EVIDENCE BEFORE ACTION':'WHEN AI STARTS SPENDING YOUR MONEY'}</div><h1 class="brand">Normal <span class="times">×</span><br>Banyan Sapling</h1><div class="subtitle">${ending?'Evidence first. Policy checked.<br>A human approves every plan that passes.':escape(config.tagline||'Before agents act, check the evidence.')}</div><div class="rule"></div>${ending?`<div class="detail">${escape(repo)}<br><span style="color:#52e0b3">@MubitLabs · Banyan Sapling</span></div>`:'<div class="chip"><span class="dot"></span>LIVE POLICY CHECKS · REAL EVIDENCE</div>'}</main></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><style>*{box-sizing:border-box}body{margin:0;color:#f0f7f7;background:#060d14;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;overflow:hidden}.mesh{position:fixed;inset:0;background:radial-gradient(ellipse at 20% 20%,#104c4555,transparent 58%),radial-gradient(ellipse at 80% 100%,#0e355355,transparent 60%)}.grid{position:fixed;inset:0;background-image:linear-gradient(#ffffff05 1px,transparent 1px),linear-gradient(90deg,#ffffff05 1px,transparent 1px);background-size:48px 48px}.main{position:relative;padding:115px 72px;max-width:1000px}.eyebrow{font-family:monospace;color:#52e0b3;font-size:14px;letter-spacing:3px;text-transform:uppercase}.brand{font-size:68px;letter-spacing:-3px;line-height:1.06;font-weight:700;margin:28px 0 24px}.times{font-weight:300;color:#52e0b3}.subtitle{font-size:28px;color:#bac9d0;line-height:1.35;max-width:760px}.rule{margin:35px 0;height:1px;background:linear-gradient(90deg,#52e0b3aa,transparent);width:650px}.detail{font-family:monospace;color:#6b9097;font-size:16px;line-height:1.6}.chip{display:inline-flex;gap:10px;border:1px solid #265449;background:#0d2520;border-radius:30px;padding:10px 17px;color:#5de8ba;font-family:monospace;font-size:13px}.dot{width:8px;height:8px;border-radius:50%;background:#5de8ba;margin-top:4px;box-shadow:0 0 12px #52e0b388}.aside{position:fixed;right:40px;top:38px;color:#53727a;font-family:monospace;font-size:11px;letter-spacing:2px}</style></head><body><div class="mesh"></div><div class="grid"></div><div class="aside">NIGHT SHIFT / POLICY CHALLENGE</div><main class="main"><div class="eyebrow">${ending?'EVIDENCE BEFORE ACTION':'WHEN AI STARTS SPENDING YOUR MONEY'}</div><h1 class="brand">Normal <span class="times">×</span><br>Banyan Sapling</h1><div class="subtitle">${ending?'Evidence first. Policy checked.<br>A human approves every plan that passes.':escape(config.tagline||'Before agents act, check the evidence.')}</div><div class="rule"></div>${ending?`<div class="detail">${escape(repo)}<br><span style="color:#52e0b3">@MubitLabs · Banyan Sapling</span></div>`:'<div class="chip"><span class="dot"></span>LIVE POLICY CHECKS · REAL EVIDENCE</div>'}</main></body></html>`;
 }
 (async()=>{
   const {chromium}=playwright();
-  const executable=process.env.EXE || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const shellCache=process.env.PLAYWRIGHT_BROWSERS_PATH || (process.platform==='darwin'
+    ? path.join(process.env.HOME,'Library/Caches/ms-playwright')
+    : process.platform==='win32'
+      ? path.join(process.env.LOCALAPPDATA||process.env.HOME,'ms-playwright')
+      : path.join(process.env.HOME,'.cache/ms-playwright'));
+  const shellFolders=fs.existsSync(shellCache)?fs.readdirSync(shellCache)
+    .filter(name=>/^chromium_headless_shell-\d+$/.test(name))
+    .sort((a,b)=>Number(b.split('-').at(-1))-Number(a.split('-').at(-1))):[];
+  const shellExecutables=['chrome-headless-shell-mac-arm64/chrome-headless-shell',
+    'chrome-headless-shell-mac-x64/chrome-headless-shell',
+    'chrome-headless-shell-linux64/chrome-headless-shell',
+    'chrome-linux/headless_shell','chrome-headless-shell-win64/chrome-headless-shell.exe'];
+  const cachedShells=shellFolders.flatMap(folder=>shellExecutables.map(relative=>path.join(shellCache,folder,relative)));
+  const executable=process.env.EXE || cachedShells.find(exe=>fs.existsSync(exe)) || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  console.log(`Browser executable: ${executable}`);
   const browser=await chromium.launch({headless:true, executablePath:executable});
   const context=await browser.newContext({viewport:{width:1280,height:800},deviceScaleFactor:2,
-    ...(dry?{}:{recordVideo:{dir:work,size:{width:1920,height:1200}}})});
+    ...(dry?{}:{recordVideo:{dir:work,size:{width:1280,height:800}}})});
   await context.addInitScript(decor);
   const page=await context.newPage();
   const errors=[],consoleErrors=[],responses=[],marks=[];
   page.on('pageerror',error=>errors.push(String(error)));
-  page.on('console',message=>{if(message.type()==='error')consoleErrors.push(message.text())});
+  page.on('console',message=>{if(message.type()==='error')consoleErrors.push({text:message.text(),location:message.location()})});
   page.on('response',async response=>{
     if(/\/api\/(?:intelligence\/(?:diagnose|generate-plan)|sapling\/stress)$/.test(response.url())) {
       try{responses.push({url:response.url(),status:response.status(),body:await response.json()})}catch{}
@@ -105,7 +119,8 @@ function card(ending=false) {
       await page.setContent(card(a.type==='end-card'));
       await page.evaluate(decor);
     }else if(a.type==='goto-tab'){
-      await page.goto(config.baseUrl||'http://localhost:3100',{waitUntil:'domcontentloaded'});
+      await page.goto(config.baseUrl||'http://localhost:3100',{waitUntil:'networkidle'});
+      await sleep(300);
       await page.getByRole('button',{name:a.tab,exact:true}).click();
       await page.getByTestId('sapling-scenario-supported').waitFor();
       if(a.primeScenario!==undefined){
@@ -156,7 +171,7 @@ function card(ending=false) {
       await page.screenshot({path:path.join(work,'screenshots',`${i}-${scene.id}.png`)});
       if(!dry)await sleep(Math.max(0,(timing.endSeconds-(performance.now()-start)/1000)*1000));
     }
-    if(errors.length||consoleErrors.length)throw new Error(`Browser errors: ${[...errors,...consoleErrors].join('; ')}`);
+    if(errors.length||consoleErrors.length)throw new Error(`Browser errors: ${JSON.stringify([...errors,...consoleErrors])}`);
   } finally {
     fs.writeFileSync(path.join(work,dry?'dryrun-marks.json':'marks.json'),JSON.stringify({scenes:marks,pageErrors:errors,consoleErrors,responses},null,2));
     const video=page.video();

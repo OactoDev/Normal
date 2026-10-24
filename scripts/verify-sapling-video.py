@@ -24,6 +24,7 @@ def main():
     checks = {
         "duration_100_to_120_seconds": 100 <= duration <= 120,
         "h264_video": any(s.get("codec_name") == "h264" for s in streams),
+        "resolution_1920_by_1200": any(s.get("width") == 1920 and s.get("height") == 1200 for s in streams),
         "has_audio": any(s.get("codec_type") == "audio" for s in streams),
         "under_512_MB": video.stat().st_size < 512_000_000,
     }
