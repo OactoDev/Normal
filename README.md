@@ -1,9 +1,9 @@
 <img width="8931" height="3240" alt="header-3" src="https://github.com/user-attachments/assets/80916a0e-baf5-40fa-b5b5-7ccf4f6ab7c3" />
 
-##The Problem##
+#The Problem
 Small ecommerce businesses struggle to identify and resolve revenue-impacting problems because their operational data is fragmented across multiple platforms, leaving owners to manually investigate issues and coordinate solutions.
 
-##What is Normal?##
+#What is Normal?
 
 Normal is a Business Intelligence and Operations platform that continuously monitors company performance and actively identifies underlying problems or growth opportunities, co-ordinating AI Agents tasked to take corrective action.
 
