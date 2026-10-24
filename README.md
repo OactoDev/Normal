@@ -5,8 +5,8 @@ AI agents that run an online shop's operations, and check their own diagnosis ag
 | | |
 |--|--|
 | **Live app** | [normal-ops.kiritokris.workers.dev](https://normal-ops.kiritokris.workers.dev) |
-| **Technical demo** | TODO: technical demo video |
-| **Ad** | TODO: ad video |
+| **Technical demo** | [normal-technical-demo.mp4](https://github.com/OactoDev/Normal/releases/download/demo-videos/normal-technical-demo.mp4) (1:44) |
+| **Ad** | [normal-ad.mp4](https://github.com/OactoDev/Normal/releases/download/demo-videos/normal-ad.mp4) (0:28) |
 
 ## How it works
 
@@ -29,4 +29,4 @@ Built at Night Shift (Mubit, London 2026).
 
 ## Deploy to Cloudflare Workers
 
-The public demo runs in `amanshah0844@gmail.com`, with D1 storage and separate browser sessions. Hosted ads, storefront updates and emails are simulated; Sapling checks are live. See [deployment instructions](deployment/README.md).
+The public demo runs on Cloudflare Workers, with D1 storage and separate browser sessions. Hosted ads, storefront updates and emails are simulated; Sapling checks are live. See [deployment instructions](deployment/README.md).
