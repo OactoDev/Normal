@@ -1,5 +1,5 @@
 {
-  "detectorVersion": "normal-detector-1.0.0",
+  "detectorVersion": "normal-detector-1.1.0",
   "generatedBy": "tests/intelligence/evaluation.test.ts",
   "seeds": {
     "dev": [
@@ -18,6 +18,14 @@
       2024,
       31337,
       555
+    ],
+    "recoveryTuning": [
+      17011,
+      28081
+    ],
+    "recoveryHeldOut": [
+      61121,
+      73129
     ]
   },
   "setup": {
@@ -92,10 +100,8 @@
     {
       "seed": 99,
       "hours": 240,
-      "findings": [
-        "depletion_acceleration@product:nk_sportswear_tshirt:increase:low"
-      ],
-      "incidents": 1,
+      "findings": [],
+      "incidents": 0,
       "investigationWorthyIncidents": 0,
       "group": "held_out_round_1"
     },
@@ -124,6 +130,38 @@
       "incidents": 0,
       "investigationWorthyIncidents": 0,
       "group": "held_out_round_1"
+    },
+    {
+      "seed": 17011,
+      "hours": 240,
+      "findings": [],
+      "incidents": 0,
+      "investigationWorthyIncidents": 0,
+      "group": "recovery_tuning"
+    },
+    {
+      "seed": 28081,
+      "hours": 240,
+      "findings": [],
+      "incidents": 0,
+      "investigationWorthyIncidents": 0,
+      "group": "recovery_tuning"
+    },
+    {
+      "seed": 61121,
+      "hours": 240,
+      "findings": [],
+      "incidents": 0,
+      "investigationWorthyIncidents": 0,
+      "group": "recovery_held_out"
+    },
+    {
+      "seed": 73129,
+      "hours": 240,
+      "findings": [],
+      "incidents": 0,
+      "investigationWorthyIncidents": 0,
+      "group": "recovery_held_out"
     }
   ],
   "scenarios": {
@@ -139,7 +177,7 @@
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 24,
+        "totalFindings": 25,
         "totalIncidents": 1,
         "group": "dev"
       },
@@ -154,7 +192,7 @@
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 21,
+        "totalFindings": 23,
         "totalIncidents": 1,
         "group": "dev"
       },
@@ -169,7 +207,7 @@
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 21,
+        "totalFindings": 22,
         "totalIncidents": 1,
         "group": "dev"
       },
@@ -184,7 +222,7 @@
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 22,
+        "totalFindings": 23,
         "totalIncidents": 1,
         "group": "held_out_blind"
       },
@@ -195,11 +233,11 @@
         "detectionDelayHours": 8,
         "firstSignal": "ctr@global",
         "investigationWorthy": true,
-        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns",
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 22,
+        "totalFindings": 24,
         "totalIncidents": 1,
         "group": "held_out_blind"
       },
@@ -240,11 +278,11 @@
         "detectionDelayHours": 8,
         "firstSignal": "ctr@global",
         "investigationWorthy": true,
-        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns",
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 22,
+        "totalFindings": 24,
         "totalIncidents": 1,
         "group": "held_out_round_1"
       },
@@ -255,11 +293,11 @@
         "detectionDelayHours": 8,
         "firstSignal": "frequency@global",
         "investigationWorthy": true,
-        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns",
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 23,
+        "totalFindings": 25,
         "totalIncidents": 1,
         "group": "held_out_round_1"
       },
@@ -274,7 +312,7 @@
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 22,
+        "totalFindings": 23,
         "totalIncidents": 1,
         "group": "held_out_round_1"
       },
@@ -285,13 +323,73 @@
         "detectionDelayHours": 8,
         "firstSignal": "ctr@global",
         "investigationWorthy": true,
-        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns",
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 22,
+        "totalFindings": 24,
         "totalIncidents": 1,
         "group": "held_out_round_1"
+      },
+      {
+        "scenario": "ad_fatigue",
+        "seed": 17011,
+        "detected": true,
+        "detectionDelayHours": 8,
+        "firstSignal": "ctr@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 26,
+        "totalIncidents": 1,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "ad_fatigue",
+        "seed": 28081,
+        "detected": true,
+        "detectionDelayHours": 8,
+        "firstSignal": "ctr@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 25,
+        "totalIncidents": 1,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "ad_fatigue",
+        "seed": 61121,
+        "detected": true,
+        "detectionDelayHours": 8,
+        "firstSignal": "ctr@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 26,
+        "totalIncidents": 1,
+        "group": "recovery_held_out"
+      },
+      {
+        "scenario": "ad_fatigue",
+        "seed": 73129,
+        "detected": true,
+        "detectionDelayHours": 8,
+        "firstSignal": "ctr@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Advertising performance deterioration across 5 campaigns with revenue decline",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 24,
+        "totalIncidents": 1,
+        "group": "recovery_held_out"
       }
     ],
     "delivery_delays": [
@@ -362,11 +460,11 @@
         "detectionDelayHours": 91,
         "firstSignal": "overdue_shipments@global",
         "investigationWorthy": true,
-        "primaryIncidentTitle": "Delivery performance deterioration",
+        "primaryIncidentTitle": "Delivery performance deterioration with revenue decline",
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 2,
+        "totalFindings": 3,
         "totalIncidents": 1,
         "group": "held_out_blind"
       },
@@ -394,12 +492,10 @@
         "investigationWorthy": true,
         "primaryIncidentTitle": "Delivery performance deterioration",
         "preInjectionFindings": 0,
-        "offTargetFindings": [
-          "depletion_acceleration@product:nk_air_force_1_07"
-        ],
-        "inventoryRiskDetected": true,
-        "totalFindings": 3,
-        "totalIncidents": 2,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 1,
         "group": "held_out_blind"
       },
       {
@@ -461,6 +557,66 @@
         "totalFindings": 2,
         "totalIncidents": 1,
         "group": "held_out_round_1"
+      },
+      {
+        "scenario": "delivery_delays",
+        "seed": 17011,
+        "detected": true,
+        "detectionDelayHours": 70,
+        "firstSignal": "late_delivery_rate@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Delivery performance deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 1,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "delivery_delays",
+        "seed": 28081,
+        "detected": true,
+        "detectionDelayHours": 74,
+        "firstSignal": "late_delivery_rate@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Delivery performance deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 1,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "delivery_delays",
+        "seed": 61121,
+        "detected": true,
+        "detectionDelayHours": 85,
+        "firstSignal": "overdue_shipments@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Delivery performance deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 1,
+        "group": "recovery_held_out"
+      },
+      {
+        "scenario": "delivery_delays",
+        "seed": 73129,
+        "detected": true,
+        "detectionDelayHours": 90,
+        "firstSignal": "overdue_shipments@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Delivery performance deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 1,
+        "group": "recovery_held_out"
       }
     ],
     "viral_demand": [
@@ -505,7 +661,7 @@
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": true,
-        "totalFindings": 13,
+        "totalFindings": 12,
         "totalIncidents": 1,
         "group": "dev"
       },
@@ -610,7 +766,7 @@
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": true,
-        "totalFindings": 13,
+        "totalFindings": 12,
         "totalIncidents": 1,
         "group": "held_out_round_1"
       },
@@ -630,6 +786,66 @@
         "totalFindings": 13,
         "totalIncidents": 2,
         "group": "held_out_round_1"
+      },
+      {
+        "scenario": "viral_demand",
+        "seed": 17011,
+        "detected": true,
+        "detectionDelayHours": 13,
+        "firstSignal": "sessions@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Inventory availability risk",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": true,
+        "totalFindings": 10,
+        "totalIncidents": 1,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "viral_demand",
+        "seed": 28081,
+        "detected": true,
+        "detectionDelayHours": 10,
+        "firstSignal": "sessions@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Inventory availability risk",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": true,
+        "totalFindings": 10,
+        "totalIncidents": 1,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "viral_demand",
+        "seed": 61121,
+        "detected": true,
+        "detectionDelayHours": 11,
+        "firstSignal": "sessions@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Inventory availability risk with revenue growth",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": true,
+        "totalFindings": 12,
+        "totalIncidents": 1,
+        "group": "recovery_held_out"
+      },
+      {
+        "scenario": "viral_demand",
+        "seed": 73129,
+        "detected": true,
+        "detectionDelayHours": 11,
+        "firstSignal": "sessions@global",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Inventory availability risk with revenue growth",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": true,
+        "totalFindings": 11,
+        "totalIncidents": 1,
+        "group": "recovery_held_out"
       }
     ],
     "promo_checkout_failure": [
@@ -639,12 +855,12 @@
         "detected": true,
         "detectionDelayHours": 14,
         "firstSignal": "checkout_failure_rate@global",
-        "investigationWorthy": false,
+        "investigationWorthy": true,
         "primaryIncidentTitle": "Checkout and conversion deterioration",
         "preInjectionFindings": 0,
         "offTargetFindings": [],
         "inventoryRiskDetected": false,
-        "totalFindings": 2,
+        "totalFindings": 3,
         "totalIncidents": 1,
         "group": "dev"
       },
@@ -797,6 +1013,66 @@
         "totalFindings": 2,
         "totalIncidents": 1,
         "group": "held_out_round_1"
+      },
+      {
+        "scenario": "promo_checkout_failure",
+        "seed": 17011,
+        "detected": true,
+        "detectionDelayHours": 20,
+        "firstSignal": "checkout_failure_rate@global",
+        "investigationWorthy": false,
+        "primaryIncidentTitle": "Checkout and conversion deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 4,
+        "totalIncidents": 3,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "promo_checkout_failure",
+        "seed": 28081,
+        "detected": true,
+        "detectionDelayHours": 20,
+        "firstSignal": "checkout_failure_rate@global",
+        "investigationWorthy": false,
+        "primaryIncidentTitle": "Checkout and conversion deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 1,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "promo_checkout_failure",
+        "seed": 61121,
+        "detected": true,
+        "detectionDelayHours": 17,
+        "firstSignal": "checkout_failure_rate@global",
+        "investigationWorthy": false,
+        "primaryIncidentTitle": "Checkout and conversion deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 1,
+        "group": "recovery_held_out"
+      },
+      {
+        "scenario": "promo_checkout_failure",
+        "seed": 73129,
+        "detected": true,
+        "detectionDelayHours": 16,
+        "firstSignal": "checkout_failure_rate@global",
+        "investigationWorthy": false,
+        "primaryIncidentTitle": "Checkout and conversion deterioration",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 3,
+        "totalIncidents": 2,
+        "group": "recovery_held_out"
       }
     ],
     "negative_reviews": [
@@ -964,6 +1240,66 @@
         "totalFindings": 1,
         "totalIncidents": 1,
         "group": "held_out_round_1"
+      },
+      {
+        "scenario": "negative_reviews",
+        "seed": 17011,
+        "detected": false,
+        "detectionDelayHours": null,
+        "firstSignal": null,
+        "investigationWorthy": false,
+        "primaryIncidentTitle": null,
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 0,
+        "totalIncidents": 0,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "negative_reviews",
+        "seed": 28081,
+        "detected": true,
+        "detectionDelayHours": 259,
+        "firstSignal": "category_low_rating_rate@category:running",
+        "investigationWorthy": true,
+        "primaryIncidentTitle": "Customer rating deterioration — Nike Quest 7",
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 2,
+        "totalIncidents": 2,
+        "group": "recovery_tuning"
+      },
+      {
+        "scenario": "negative_reviews",
+        "seed": 61121,
+        "detected": false,
+        "detectionDelayHours": null,
+        "firstSignal": null,
+        "investigationWorthy": false,
+        "primaryIncidentTitle": null,
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 0,
+        "totalIncidents": 0,
+        "group": "recovery_held_out"
+      },
+      {
+        "scenario": "negative_reviews",
+        "seed": 73129,
+        "detected": false,
+        "detectionDelayHours": null,
+        "firstSignal": null,
+        "investigationWorthy": false,
+        "primaryIncidentTitle": null,
+        "preInjectionFindings": 0,
+        "offTargetFindings": [],
+        "inventoryRiskDetected": false,
+        "totalFindings": 0,
+        "totalIncidents": 0,
+        "group": "recovery_held_out"
       }
     ]
   },
@@ -1008,9 +1344,25 @@
       "maxLowIn72h": 3,
       "totalLow": 4
     },
+    "17011": {
+      "maxLowIn72h": 4,
+      "totalLow": 6
+    },
+    "28081": {
+      "maxLowIn72h": 4,
+      "totalLow": 7
+    },
     "31337": {
       "maxLowIn72h": 5,
       "totalLow": 8
+    },
+    "61121": {
+      "maxLowIn72h": 3,
+      "totalLow": 4
+    },
+    "73129": {
+      "maxLowIn72h": 2,
+      "totalLow": 4
     }
   },
   "deliveryDelayByHistory": [

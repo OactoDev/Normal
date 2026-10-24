@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { virtualDate } from "@/lib/format";
 
 type Severity = "low" | "medium" | "high" | "critical";
 interface RunsResponse { activeSimulationRunId: string | null; runs: Array<{ simulationRunId: string; virtualTime: string }> }
-interface Status { lastAsOf: string | null; lastScanAt: string | null; watermark: string | null }
+interface Status { lastAsOf: string | null; lastScanAt: string | null; watermark: string | null;
+  jobs?: Record<string, number>; methodA?: { enabled: boolean }; failedJobs?: Array<{ jobKey: string; lastError: string; attempts: number }>;
+  worker?: { connected: boolean; lastHeartbeatAt: string | null; lastError: string | null } }
 interface AnomalyItem {
   anomaly: { anomalyId: string; metric: string; direction: string; severity: Severity; status: string; actualValue: number; baselineValue: number; changePercent: number;
     currentWindow: { startAt: string; endAt: string }; baselineWindow: { startAt: string; endAt: string }; detectedAt: string; sourceSnapshotIds: string[] };
@@ -53,6 +55,10 @@ export function MonitorConsole() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  // Mirrors the selected run so responses for a run the operator has since left are discarded.
+  const selectedRef = useRef<string | null>(null);
+
+  const selectRun = useCallback((id: string | null) => { selectedRef.current = id; setRunId(id); }, []);
 
   const load = useCallback(async (id: string | null, sev: Severity | null) => {
     if (!id) return;
@@ -63,26 +69,39 @@ export function MonitorConsole() {
         api<{ total: number; items: AnomalyItem[] }>(`/api/anomalies?${q}&limit=100${sev ? `&severity=${sev}` : ""}`),
         api<{ items: Incident[] }>(`/api/incidents?${q}&limit=50${sev ? `&severity=${sev}` : ""}`),
       ]);
+      if (selectedRef.current !== id) return;
       setStatus(st); setAnomalies(an); setIncidents(inc.items); setError(null);
     } catch (e) {
       if ((e as { status?: number }).status === 404 && !(e as { code?: string }).code) setUnavailable(true);
-      else setError((e as Error).message);
+      else if (selectedRef.current === id) setError((e as Error).message);
     }
   }, []);
 
   useEffect(() => {
+    // Strict Mode mounts twice in development; a cancelled first pass must not override a run chosen meanwhile.
+    let cancelled = false;
     void (async () => {
       try {
         const r = await api<RunsResponse>("/api/dev/simulator/runs");
+        if (cancelled) return;
         setRuns(r);
+        if (selectedRef.current) return;
         const id = r.activeSimulationRunId ?? r.runs[0]?.simulationRunId ?? null;
-        setRunId(id);
+        selectRun(id);
         await load(id, null);
       } catch (e) {
+        if (cancelled) return;
         if ((e as { status?: number }).status === 404) setUnavailable(true); else setError((e as Error).message);
       }
     })();
-  }, [load]);
+    return () => { cancelled = true; };
+  }, [load, selectRun]);
+
+  useEffect(() => {
+    if (!runId) return;
+    const timer = setInterval(() => { void load(runId, severity); }, 5_000);
+    return () => clearInterval(timer);
+  }, [runId, severity, load]);
 
   const runScan = async () => {
     if (!runId) return;
@@ -113,7 +132,7 @@ export function MonitorConsole() {
         <div className="cr-head">
           <div><h1>Anomaly monitor</h1><div className="muted">Detector reads only canonical events and metric snapshots. Scenario settings are never visible to it.</div></div>
           <div className="row">
-            <select className="select" style={{ width: "auto" }} value={runId ?? ""} onChange={(e) => { setRunId(e.target.value); setBundle(null); setScan(null); void load(e.target.value, severity); }} data-testid="monitor-run-select" disabled={!runs?.runs.length}>
+            <select className="select" style={{ width: "auto" }} value={runId ?? ""} onChange={(e) => { selectRun(e.target.value); setBundle(null); setScan(null); setStatus(null); setAnomalies(null); setIncidents([]); void load(e.target.value, severity); }} data-testid="monitor-run-select" disabled={!runs?.runs.length}>
               {!runs?.runs.length ? <option value="">No runs</option> : null}
               {runs?.runs.map((r) => <option key={r.simulationRunId} value={r.simulationRunId}>{r.simulationRunId}</option>)}
             </select>
@@ -122,6 +141,11 @@ export function MonitorConsole() {
         </div>
         {unavailable ? <div className="alert error">Monitoring controls are only available in development or a configured demo mode.</div> : null}
         {error ? <div className="alert error" data-testid="monitor-error">{error}</div> : null}
+        <div className="card" data-testid="monitor-worker-status">
+          Direct trigger: {status?.methodA?.enabled ? "enabled" : "disabled"} · Change Stream worker: {status?.worker?.connected ? "connected (recent heartbeat)" : "no current connection confirmed"}
+          <div className="muted">Jobs: {status?.jobs?.pending ?? 0} pending · {status?.jobs?.running ?? 0} running · {status?.jobs?.completed ?? 0} completed · {status?.jobs?.failed ?? 0} failed</div>
+          {status?.failedJobs?.map((job) => <div key={job.jobKey} className="alert error">Monitoring attempt {job.attempts}: {job.lastError}</div>)}
+        </div>
 
         <div className="grid kpis">
           <div className="card kpi"><span className="label">Last scan (wall clock)</span><span className="value" style={{ fontSize: 16 }} data-testid="last-scan">{status?.lastScanAt ? new Date(status.lastScanAt).toLocaleString("en-GB") : "never"}</span></div>

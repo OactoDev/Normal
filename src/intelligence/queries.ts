@@ -113,22 +113,25 @@ export async function listIncidents(input: unknown, dbOverride?: Db) {
  * Anomalies, the incident grouping, each finding's measurements/baselines/thresholds, the canonical MetricSnapshots
  * those anomalies cite, and resolvable source references into `business_events`. No diagnosis, no simulator truth.
  */
-export async function getInvestigationBundle(investigationId: string, dbOverride?: Db) {
+export const InvestigationScope = z.object({ businessId: BusinessId, simulationRunId: RunId.optional() }).strict();
+
+export async function getInvestigationBundle(investigationId: string, dbOverride?: Db, input: unknown = {}) {
+  const scope = InvestigationScope.parse(input);
   const db = dbOverride ?? (await getDb());
-  const raw = await db.collection(COLLECTIONS.investigations).findOne({ investigationId }, { projection: { _id: 0 } });
+  const raw = await db.collection(COLLECTIONS.investigations).findOne({ investigationId, ...scope }, { projection: { _id: 0 } });
   if (!raw) return null;
   const investigation = canonicalInvestigation(raw);
   const simulationRunId = raw.simulationRunId as string;
   const { businessId } = investigation;
-  const incident = await db.collection<IncidentDoc>(COLLECTIONS.incidents).findOne({ businessId, investigationId }, { projection: { _id: 0 } });
+  const incident = await db.collection<IncidentDoc>(COLLECTIONS.incidents).findOne({ businessId, simulationRunId, investigationId }, { projection: { _id: 0 } });
   const findingIds = incident?.findingIds ?? [];
   const [anomalyDocs, findings] = await Promise.all([
-    db.collection(COLLECTIONS.anomalies).find({ businessId, anomalyId: { $in: investigation.anomalyIds } }, { projection: { _id: 0 } }).toArray(),
+    db.collection(COLLECTIONS.anomalies).find({ businessId, simulationRunId, anomalyId: { $in: investigation.anomalyIds } }, { projection: { _id: 0 } }).toArray(),
     db.collection<FindingDoc>(COLLECTIONS.detectionFindings).find({ businessId, simulationRunId, findingId: { $in: findingIds } }, { projection: { _id: 0 } }).toArray(),
   ]);
   const anomalies = anomalyDocs.map(canonicalAnomaly);
   const snapshotIds = [...new Set(anomalies.flatMap((a) => a.sourceSnapshotIds))];
-  const snapshotDocs = await db.collection(COLLECTIONS.metricSnapshots).find({ businessId, snapshotId: { $in: snapshotIds } }, { projection: { _id: 0 } }).toArray();
+  const snapshotDocs = await db.collection(COLLECTIONS.metricSnapshots).find({ businessId, simulationRunId, snapshotId: { $in: snapshotIds } }, { projection: { _id: 0 } }).toArray();
   const related = incident
     ? await db.collection<IncidentDoc>(COLLECTIONS.incidents).find({ businessId, simulationRunId, incidentId: { $ne: incident.incidentId },
       onsetAt: { $lte: incident.resolvedAt ?? incident.lastTriggeredAt }, $or: [{ resolvedAt: null }, { resolvedAt: { $gte: incident.onsetAt } }] },

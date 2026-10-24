@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import type { Db, Document } from "mongodb";
+import type { Db, Document, AnyBulkWriteOperation } from "mongodb";
 import { Anomaly, Investigation, type AnomalyT, type InvestigationT, type MetricSnapshotT } from "@normal/contracts";
 import { computeSnapshots, snapshotId } from "@/analytics/metrics";
 import { COLLECTIONS } from "@/lib/collections";
@@ -117,6 +117,7 @@ interface Ctx {
   asOf: string;
   config: DetectionConfig;
   catalogue: CatalogueView;
+  lockToken?: string;
 }
 
 function segmentLabel(key: string, catalogue: CatalogueView): string {
@@ -200,6 +201,7 @@ export async function persistDetection(ctx: Ctx, run: DetectionRun, drafts: Inci
   const anomaliesCol = db.collection<AnomalyT & { simulationRunId: string }>(COLLECTIONS.anomalies);
   const incidentsCol = db.collection<IncidentDoc>(COLLECTIONS.incidents);
   const investigationsCol = db.collection<InvestigationT & { simulationRunId: string }>(COLLECTIONS.investigations);
+  const investigationOps: AnyBulkWriteOperation<InvestigationT & { simulationRunId: string }>[] = [];
 
   // ---------------------------------------------------------------- findings
   const existing = await findingsCol.find({ ...scope, $or: [{ status: "active" }, { lastTriggeredAt: { $gte: run.replayFrom } }] }, { projection: { _id: 0 } }).toArray();
@@ -313,14 +315,14 @@ export async function persistDetection(ctx: Ctx, run: DetectionRun, drafts: Inci
       const investigation = Investigation.parse({
         schemaVersion: 1, businessId, investigationId, anomalyIds, status: "open", title: draft.title, evidenceIds: [], startedAt: asOf, updatedAt: asOf,
       });
-      await investigationsCol.updateOne({ businessId, investigationId }, { $setOnInsert: { ...investigation, simulationRunId } }, { upsert: true });
+      investigationOps.push({ updateOne: { filter: { businessId, investigationId }, update: { $setOnInsert: { ...investigation, simulationRunId } }, upsert: true } });
       summary.investigations.created.push(investigationId);
     } else if (investigationId) {
       const inv = await investigationsCol.findOne({ businessId, investigationId }, { projection: { _id: 0 } });
       if (inv) {
         const merged = [...new Set([...inv.anomalyIds, ...anomalyIds])];
         if (merged.length !== inv.anomalyIds.length) {
-          await investigationsCol.updateOne({ businessId, investigationId }, { $set: { anomalyIds: merged, updatedAt: asOf } });
+          investigationOps.push({ updateOne: { filter: { businessId, investigationId }, update: { $set: { anomalyIds: merged, updatedAt: asOf } } } });
           summary.investigations.linked.push(investigationId);
         }
       }
@@ -350,9 +352,6 @@ export async function persistDetection(ctx: Ctx, run: DetectionRun, drafts: Inci
   }
 
   // --------------------------------------------------------------- write out
-  if (docs.length) await findingsCol.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { ...scope, findingId: d.findingId }, replacement: d, upsert: true } })), { ordered: false });
-  if (incidentDocs.length) await incidentsCol.bulkWrite(incidentDocs.map((d) => ({ replaceOne: { filter: { ...scope, incidentId: d.incidentId }, replacement: d, upsert: true } })), { ordered: false });
-
   const incidentById = new Map(incidentDocs.map((i) => [i.incidentId, i]));
   const anomalyDocs = docs.filter((d) => d.anomalyId);
   const prior = new Map((await anomaliesCol.find({ businessId, anomalyId: { $in: anomalyDocs.map((d) => d.anomalyId!) } }, { projection: { _id: 0 } }).toArray()).map((a) => [a.anomalyId, a]));
@@ -374,16 +373,32 @@ export async function persistDetection(ctx: Ctx, run: DetectionRun, drafts: Inci
     if (!before) summary.anomalies.created++; else summary.anomalies.updated++;
     if (status === "resolved" && before && before.status !== "resolved") summary.anomalies.resolved++;
   }
-  if (anomalyOps.length) await anomaliesCol.bulkWrite(anomalyOps as never, { ordered: false });
-
   const obs = docs.filter((d) => d.status === "active" || d.resolvedAt === asOf || d.lastTriggeredAt === asOf);
+  // Evidence snapshots are deterministic and can safely survive a failed attempt.
+  // Publish the linked incident graph atomically, fencing a worker whose run lease expired.
+  const session = db.client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      if (ctx.lockToken) {
+        const owned = await db.collection(COLLECTIONS.monitorState).updateOne(
+          { ...scope, "lock.token": ctx.lockToken, "lock.expiresAt": { $gt: new Date().toISOString() } },
+          { $set: { persistenceFence: asOf } }, { session },
+        );
+        if (!owned.matchedCount) throw new Error("Monitoring lease lost before persistence");
+      }
+      if (investigationOps.length) await investigationsCol.bulkWrite(investigationOps, { session });
+      if (docs.length) await findingsCol.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { ...scope, findingId: d.findingId }, replacement: d, upsert: true } })), { session });
+      if (incidentDocs.length) await incidentsCol.bulkWrite(incidentDocs.map((d) => ({ replaceOne: { filter: { ...scope, incidentId: d.incidentId }, replacement: d, upsert: true } })), { session });
+      if (anomalyOps.length) await anomaliesCol.bulkWrite(anomalyOps as never, { session });
   if (obs.length) {
     await db.collection(COLLECTIONS.detectionObservations).bulkWrite(obs.map((d) => ({
       replaceOne: { filter: { businessId, observationId: `${d.findingId}@${asOf}` }, upsert: true, replacement: {
         businessId, simulationRunId, observationId: `${d.findingId}@${asOf}`, findingId: d.findingId, anomalyId: d.anomalyId, incidentId: d.incidentId, asOf,
         status: d.status, severity: d.severity, evaluation: d.evaluation, detectorVersion: DETECTOR_VERSION,
       } },
-    })), { ordered: false });
+    })), { session });
   }
+    }, { writeConcern: { w: "majority" } });
+  } finally { await session.endSession(); }
   return summary;
 }

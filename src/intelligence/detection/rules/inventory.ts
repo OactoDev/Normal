@@ -1,5 +1,6 @@
-import { median, poissonTail, round, zFromTail } from "@/intelligence/baselines/statistics";
+import { median, conditionalCountTail, robustSd, round, zFromTail } from "@/intelligence/baselines/statistics";
 import type { CustomArgs, Evaluation, SignalDef } from "@/intelligence/detection/signal";
+import { requiredZ } from "@/intelligence/detection/signal";
 import type { SignalSeries } from "@/intelligence/signals/series";
 import { dailyBefore, ratio, rateImpact } from "@/intelligence/detection/rules/common";
 
@@ -89,14 +90,19 @@ function acceleration({ series: s, segment, kEval, cutoffK, config }: CustomArgs
   if (days.length < config.minBaselineSamples) return blank(s, kEval, `needs ≥${config.minBaselineSamples} prior days of inventory history, found ${days.length}`);
   const v0 = median(days) as number;
   const ref = Math.max(v0, 1);
-  const z = Math.min((d.units - v0) / Math.sqrt(ref), d.units > v0 ? zFromTail(poissonTail(Math.floor(d.units), ref, true)) : 0);
+  // Baseline depletion is estimated, not a known Poisson mean; account for its
+  // uncertainty and the simultaneous comparison across catalogue products.
+  const spread = Math.max(robustSd(days) ?? 0, Math.sqrt(ref)) * Math.sqrt(1 + Math.PI / (2 * days.length));
+  const z = Math.min((d.units - v0) / spread,
+    d.units > v0 ? zFromTail(conditionalCountTail(Math.floor(d.units), days.reduce((a, b) => a + b, 0), days.length, true)) : 0);
+  const zRequired = requiredZ(3.5, s.products.size);
   const rel = d.units / ref;
-  const triggered = d.units >= 12 && rel >= 2.5 && z >= 3.5;
+  const triggered = d.units >= 12 && rel >= 2.5 && z >= zRequired;
   return { ok: true, at: s.time(kEval), window: { startAt: s.time(kEval - 24), endAt: s.time(kEval) }, actual: round(d.units, 2), expected: v0,
     delta: round(d.units - v0, 2), changePercent: v0 > 0 ? round(((d.units - v0) / v0) * 100, 2) : null, z: round(z, 3),
     currentNumerator: d.units, currentDenominator: null,
-    baseline: null, triggered, strength: round(Math.min(rel / 2.5, z / 3.5), 4),
-    details: { unitsLast24h: round(d.units, 2), baselineDailyUnits: days, reliability: round(days.length / (days.length + 2), 3) } };
+    baseline: null, triggered, strength: round(Math.min(rel / 2.5, z / zRequired), 4),
+    details: { unitsLast24h: round(d.units, 2), baselineDailyUnits: days, zRequired, significanceTest: "conditional count test with catalogue multiplicity correction", reliability: round(days.length / (days.length + 2), 3) } };
 }
 
 const productRevenue = (c: { series: SignalSeries; segment: string; cutoffK: number }) => dailyBefore(c.series, c.segment, "revenueMinor", c.cutoffK);

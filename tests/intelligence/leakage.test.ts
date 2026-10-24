@@ -27,7 +27,7 @@ const FORBIDDEN_TOKENS = [
 ];
 const ALLOWED_COLLECTION_KEYS = new Set([
   "businessEvents", "simulatedProducts", "metricSnapshots", "anomalies", "investigations", "detectionFindings",
-  "detectionObservations", "incidents", "monitorRuns", "monitorState",
+  "detectionObservations", "incidents", "monitorRuns", "monitorState", "monitoringWindows", "monitoringJobs", "monitoringWorkers",
 ]);
 
 describe("detector data boundary (code inspection)", () => {

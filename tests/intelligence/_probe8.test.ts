@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "vitest";
 import { writeFileSync, appendFileSync } from "node:fs";
 import { harnessCatalogue, simulate } from "@/intelligence/evaluation/harness";
@@ -5,7 +8,7 @@ import { groupEvents } from "@/intelligence/signals/rows";
 import { SignalSeries } from "@/intelligence/signals/series";
 import { SIGNALS_BY_ID } from "@/intelligence/detection/rules";
 import { evaluatePoint } from "@/intelligence/detection/signal";
-const OUT = "/private/tmp/claude-501/-Users-oacto-Normal/fd2b8c14-0a0f-4388-94ca-dc3bc687bbd8/scratchpad/probe8.txt";
+const OUT = join(mkdtempSync(join(tmpdir(), "normal-diagnostic-")), "probe8.txt");
 it("promo", () => {
   writeFileSync(OUT, "");
   const t = simulate({ seed: 1234, healthyHours: 72, scenario: "promo_checkout_failure", severity: 0.8, scenarioHours: 96 });

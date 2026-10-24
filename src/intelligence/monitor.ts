@@ -100,9 +100,19 @@ export async function runMonitor(input: unknown, options: { db?: Db; config?: De
 
   const token = req.dryRun ? null : await acquire(db, businessId, simulationRunId);
   if (!req.dryRun && !token) throw new MonitorError("A monitoring scan is already running for this run", "monitor_locked", 409);
+  let leaseLost = false;
+  const renew = async () => {
+    if (!token) return;
+    const r = await db.collection(COLLECTIONS.monitorState).updateOne(
+      { businessId, simulationRunId, "lock.token": token, "lock.expiresAt": { $gt: new Date().toISOString() } },
+      { $set: { "lock.expiresAt": new Date(Date.now() + LOCK_MS).toISOString() } },
+    );
+    if (!r.matchedCount) leaseLost = true;
+  };
+  const heartbeat = token ? setInterval(() => { void renew().catch(() => { leaseLost = true; }); }, LOCK_MS / 3) : null;
   try {
     const state = await db.collection(COLLECTIONS.monitorState).findOne({ businessId, simulationRunId });
-    const lastAsOf = (state?.lastAsOf as string | null | undefined) ?? null;
+    const lastAsOf = state?.detectorVersion === DETECTOR_VERSION ? (state.lastAsOf as string | null) : null;
     if (!req.dryRun && lastAsOf && Date.parse(asOf) < Date.parse(lastAsOf)) {
       throw new MonitorError(`asOf ${asOf} is older than the last processed window ${lastAsOf}; use dryRun to re-analyse history`, "stale_window", 409);
     }
@@ -119,7 +129,9 @@ export async function runMonitor(input: unknown, options: { db?: Db; config?: De
     const incidents = correlate(run.findings, run.asOf, catalogue, config);
     const scanId = `scan_${simulationRunId}_${asOf.replace(/[^0-9]/g, "").slice(0, 12)}`;
     const repeatScan = lastAsOf === asOf;
-    const persisted = req.dryRun ? null : await persistDetection({ db, businessId, simulationRunId, asOf, config, catalogue }, run, incidents);
+    if (leaseLost) throw new MonitorError("Monitoring lease lost", "monitor_locked", 409);
+    await renew();
+    const persisted = req.dryRun ? null : await persistDetection({ db, businessId, simulationRunId, asOf, config, catalogue, lockToken: token! }, run, incidents);
     const byTheme: Record<string, number> = {};
     for (const f of run.findings.filter((x) => x.active)) byTheme[f.theme] = (byTheme[f.theme] ?? 0) + 1;
     const summary: MonitorSummary = {
@@ -139,21 +151,34 @@ export async function runMonitor(input: unknown, options: { db?: Db; config?: De
         { $set: { scanId, detectorVersion: DETECTOR_VERSION, lastScannedAt: now, durationMs: summary.durationMs, summary }, $setOnInsert: { businessId, simulationRunId, asOf, firstScannedAt: now }, $inc: { repeats: 1 } },
         { upsert: true },
       );
-      await db.collection(COLLECTIONS.monitorState).updateOne({ businessId, simulationRunId },
-        { $set: { lastScanAt: now, lastScanId: scanId, lastAsOf: lastAsOf && Date.parse(lastAsOf) > Date.parse(asOf) ? lastAsOf : asOf } });
+      await db.collection(COLLECTIONS.monitorState).updateOne({ businessId, simulationRunId, "lock.token": token },
+        { $set: { detectorVersion: DETECTOR_VERSION, lastScanAt: now, lastScanId: scanId, lastAsOf: lastAsOf && Date.parse(lastAsOf) > Date.parse(asOf) ? lastAsOf : asOf } });
     }
     return summary;
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
     if (token) await release(db, businessId, simulationRunId, token);
   }
 }
 
 export async function monitorStatus(businessId: string, simulationRunId: string, db?: Db) {
   const d = db ?? (await getDb());
-  const [state, recent] = await Promise.all([
-    d.collection(COLLECTIONS.monitorState).findOne({ businessId, simulationRunId }, { projection: { _id: 0, lock: 0 } }),
+  const [state, recent, jobs, failedJobs, worker] = await Promise.all([
+    d.collection(COLLECTIONS.monitorState).findOne({ businessId, simulationRunId }, { projection: { _id: 0, lock: 0, jobLock: 0 } }),
     d.collection(COLLECTIONS.monitorRuns).find({ businessId, simulationRunId }, { projection: { _id: 0, summary: 0 } }).sort({ lastScannedAt: -1 }).limit(10).toArray(),
+    d.collection(COLLECTIONS.monitoringJobs).aggregate<{ _id: string; count: number }>([
+      { $match: { businessId, simulationRunId, detectorVersion: DETECTOR_VERSION } }, { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]).toArray(),
+    d.collection(COLLECTIONS.monitoringJobs).find({ businessId, simulationRunId, status: "failed" }, { projection: { _id: 0, jobKey: 1, lastError: 1, attempts: 1, windowEnd: 1 } }).sort({ windowEnd: -1 }).limit(10).toArray(),
+    d.collection(COLLECTIONS.monitoringWorkers).findOne({ workerId: "normal-monitor-watch" }),
   ]);
   const horizon = await loadHorizon(d, businessId, simulationRunId);
-  return { businessId, simulationRunId, lastAsOf: state?.lastAsOf ?? null, lastScanAt: state?.lastScanAt ?? null, watermark: horizon?.watermark ?? null, recentScans: recent };
+  const fresh = worker?.lastHeartbeatAt instanceof Date && Date.now() - worker.lastHeartbeatAt.getTime() < 45_000;
+  const flag = process.env.NORMAL_AUTO_MONITOR;
+  return { businessId, simulationRunId, lastAsOf: state?.lastAsOf ?? null, lastScanAt: state?.lastScanAt ?? null, watermark: horizon?.watermark ?? null, recentScans: recent,
+    jobs: Object.fromEntries(jobs.map((j) => [j._id, j.count])), failedJobs,
+    methodA: { enabled: flag === "true" || (flag !== "false" && process.env.NODE_ENV === "development") },
+    worker: { connected: Boolean(fresh && worker?.connected && worker?.lock?.until > new Date()), lastHeartbeatAt: worker?.lastHeartbeatAt ?? null,
+      lastReconciledAt: worker?.lastReconciledAt ?? null, lastError: worker?.lastError ?? null },
+  };
 }

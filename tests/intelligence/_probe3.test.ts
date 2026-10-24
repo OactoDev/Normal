@@ -1,9 +1,12 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "vitest";
 import { writeFileSync, appendFileSync } from "node:fs";
 import { harnessCatalogue, simulate } from "@/intelligence/evaluation/harness";
 import { groupEvents } from "@/intelligence/signals/rows";
 import { SignalSeries, FIELDS } from "@/intelligence/signals/series";
-const OUT = "/private/tmp/claude-501/-Users-oacto-Normal/fd2b8c14-0a0f-4388-94ca-dc3bc687bbd8/scratchpad/probe3.txt";
+const OUT = join(mkdtempSync(join(tmpdir(), "normal-diagnostic-")), "probe3.txt");
 it("volumes", () => {
   writeFileSync(OUT, "");
   const t = simulate({ seed: 42, healthyHours: 24 * 7 });

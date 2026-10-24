@@ -1,7 +1,10 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "vitest";
 import { writeFileSync, appendFileSync } from "node:fs";
 import { detectTimeline, simulate } from "@/intelligence/evaluation/harness";
-const OUT = "/private/tmp/claude-501/-Users-oacto-Normal/fd2b8c14-0a0f-4388-94ca-dc3bc687bbd8/scratchpad/probe7.txt";
+const OUT = join(mkdtempSync(join(tmpdir(), "normal-diagnostic-")), "probe7.txt");
 it("late fp", () => {
   writeFileSync(OUT, "");
   for (const seed of [7, 1234]) {

@@ -97,3 +97,22 @@ half-open `[startAt, endAt)` in **virtual** time.
 ### Partner adapters
 
 Service functions, not HTTP: see [`partner-integration.md`](partner-integration.md).
+
+### Anomaly monitoring (dev/demo)
+
+All monitoring routes use the same development/demo-key guard as simulator controls.
+
+| Method | Path | Behaviour |
+|---|---|---|
+| POST | `/api/dev/monitor/run` | `{businessId?, simulationRunId, asOf?, dryRun?}`. `asOf` must be a completed UTC hour boundary. Returns measured signals, skipped checks, incidents and persistence counts. |
+| GET | `/api/dev/monitor/run?businessId&simulationRunId` | Last successful scan, observed watermark and recent scans. |
+| GET | `/api/anomalies` | Filters: business/run, status, severity, canonical metric, category, from/to. Pagination: `limit` 1–100, `offset` 0–10,000. Returns canonical anomalies with supplementary finding metadata. |
+| GET | `/api/incidents` | Correlated observations, severity, investigation policy and linked IDs. Filters: business/run, status, severity, category; same pagination. |
+| GET | `/api/investigations` | Canonical investigations and incident metadata. Filters: business/run, status; same pagination. |
+| GET | `/api/investigations/:id?businessId&simulationRunId` | Scoped investigation, anomalies, metric snapshots, findings, source references and bounded event queries. Business defaults to `nike_demo`; an incorrect business or supplied run returns 404. |
+
+The detector reports observations and correlations, never a definitive cause. The v1 canonical metric enum
+does not contain ROAS, stock units, checkout failures or social mentions. These remain supplementary
+findings and may support an investigation linked to a qualifying canonical anomaly; they are never relabelled
+as an unrelated canonical metric. Inventory-only findings therefore do not independently open a canonical
+investigation until a supported business-impact metric also qualifies.

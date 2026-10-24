@@ -92,8 +92,18 @@ flowchart LR
   AD --> DOM
   AD --> ING
   AD --> RCPT
-  FUT[Future: anomaly → evidence → Mubit diagnosis → ProposedPlan] --> PLANS
-  EV --> FUT
-  MS --> FUT
+  RUN --> PUB[After durable commit and lock release: publish completed metrics]
+  PUB --> MW[(monitoring_windows)]
+  PUB --> DIRECT[Next.js after: bounded direct trigger]
+  MW --> WATCH[Standalone Change Stream worker + reconciliation]
+  DIRECT --> JOB[(monitoring_jobs: unique keys + leases)]
+  WATCH --> JOB
+  JOB --> DET[Shared detector: baselines → rules → correlation → severity]
+  EV --> DET
+  MS --> DET
+  DET --> GRAPH[(Atomic anomalies + incidents + investigations)]
+  GRAPH --> MON[/dev/monitor]
+  GRAPH --> FUT[Future: evidence → Mubit diagnosis → ProposedPlan]
+  FUT --> PLANS
   PLANS --> EXEC[Partner: approval + orchestration]
   EXEC --> AD

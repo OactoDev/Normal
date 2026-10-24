@@ -44,3 +44,34 @@ await db.collection('model_corrections').createIndex({ businessId: 1, diagnosisI
 ```
 
 **Data model note:** Keep source-provider IDs separate from Normal IDs, and use currency as an explicit field. Do not count refunds twice when computing net revenue. Do not add users' email addresses to LLM evidence packages unless necessary and authorised. Limit access to supplier and customer data. Use stable seed/run IDs to make demo repeatable.
+
+## Implemented monitoring storage
+
+`src/lib/collections.ts` is the executable index inventory. The roadmap table above also includes future collections;
+the monitor creates only the collections it uses.
+
+| Collection | Identity/index | Purpose |
+|---|---|---|
+| `monitoring_windows` | unique `windowKey`; business/run/windowEnd | Ready batches of 1–72 complete UTC hours; all cited hourly snapshots are validated before publication |
+| `monitoring_jobs` | unique `jobKey`; business/run/windowEnd/status; status/nextAttemptAt/leaseUntil | Pending/running/completed/failed, attempts, retry time, lease token/expiry, summary/error |
+| `monitoring_workers` | unique `workerId` | Watcher lease, BSON resume token, checkpoint time, recent heartbeat and connection state |
+| `monitor_state` | unique business/run | Detector lease, queue lease, last scan and detector version |
+| `monitor_runs` | unique business/run/asOf | Scan summaries and successful scan timestamps |
+| `detection_findings` | unique business/run/findingId | Explainable signal measurements, frozen baselines, thresholds and source references |
+| `detection_observations` | unique business/observationId | Finding measurements at each scan boundary |
+| `incidents` | unique business/run/incidentId | Correlated findings, severity history and canonical investigation link |
+| `anomalies` | unique business/anomalyId | Validated canonical `Anomaly` plus storage-only run envelope |
+| `investigations` | unique business/investigationId | Validated canonical `Investigation` plus storage-only run envelope |
+
+The job key is SHA-256 of the JSON tuple `(businessId, simulationRunId, windowStart, windowEnd, detectorVersion)`.
+Ready-window and job upserts use majority acknowledgement. The linked incident graph is committed in one
+transaction that also checks the detector lease; deterministic evidence snapshots may safely precede it.
+
+Producer publication progress (`monitoringBatch`, `monitoringPublishedThrough`, `publicationLock`) lives on
+the existing run record. Only `src/simulator/monitoring.ts` reads those clock/progress fields. Detector modules
+never read private simulation state. A crash after the clock commit but before metric/ready publication is recovered
+from this durable producer progress. Tests/reset cleanup includes monitoring windows/jobs for the specified run only.
+
+Worker checkpoints advance only after the corresponding job upsert succeeds. A periodic anti-join finds ready
+windows without a job even if the stream checkpoint is missing or expired. Failed/expired jobs are reclaimed by
+the normal job processor; exhausted jobs remain visible for operator review rather than being silently reset.

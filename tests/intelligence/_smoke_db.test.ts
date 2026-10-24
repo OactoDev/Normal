@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "vitest";
 import { writeFileSync, appendFileSync } from "node:fs";
 import { getDb } from "@/lib/mongodb";
@@ -6,7 +9,7 @@ import { runMonitor } from "@/intelligence/monitor";
 import { loadGroupedRows, loadHorizon } from "@/intelligence/signals/load";
 import { groupEvents } from "@/intelligence/signals/rows";
 import { TEST_BUSINESS, eventsForRun, resetTestRun } from "../helpers";
-const OUT = "/private/tmp/claude-501/-Users-oacto-Normal/fd2b8c14-0a0f-4388-94ca-dc3bc687bbd8/scratchpad/smoke.txt";
+const OUT = join(mkdtempSync(join(tmpdir(), "normal-diagnostic-")), "smoke.txt");
 const RUN = "t_det_smoke";
 it("smoke", async () => {
   writeFileSync(OUT, "");

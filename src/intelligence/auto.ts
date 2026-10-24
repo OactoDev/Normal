@@ -1,8 +1,11 @@
 import "server-only";
 
 import { after } from "next/server";
-import { describeDbError } from "@/lib/mongodb";
-import { runMonitor } from "@/intelligence/monitor";
+import { describeDbError, getDb } from "@/lib/mongodb";
+import { drainJobs } from "@/intelligence/monitoring/process";
+import { reconcileWindows } from "@/intelligence/monitoring/recovery";
+import { COLLECTIONS } from "@/lib/collections";
+import { MAX_ATTEMPTS } from "@/intelligence/monitoring/jobs";
 
 const AUTO_MONITOR_ATTEMPTS = 20;
 const AUTO_MONITOR_BACKOFF_MS = 1_500;
@@ -19,18 +22,18 @@ export function scheduleAutoMonitor(businessId: string, simulationRunId: string)
   if (!enabled) return false;
   try {
     after(async () => {
-      // A scan already holding the lock (e.g. from the previous tick) delays this one; retry so the newest hour is
-      // always analysed. Each attempt analyses the latest observed hour at that moment.
+      const db = await getDb();
+      const scope = { businessId, simulationRunId };
       for (let attempt = 0; attempt < AUTO_MONITOR_ATTEMPTS; attempt++) {
         try {
-          await runMonitor({ businessId, simulationRunId });
-          return;
+          await reconcileWindows(db, scope);
+          await drainJobs(db, scope);
+          const pending = await db.collection(COLLECTIONS.monitoringJobs).countDocuments({ ...scope, status: { $ne: "completed" }, attempts: { $lt: MAX_ATTEMPTS } });
+          if (!pending) return;
         } catch (error) {
-          const code = (error as { code?: string }).code;
-          if (code === "monitor_locked") { await new Promise((r) => setTimeout(r, AUTO_MONITOR_BACKOFF_MS)); continue; }
-          if (code !== "stale_window") console.error("[auto-monitor]", describeDbError(error));
-          return;
+          console.error("[auto-monitor]", describeDbError(error));
         }
+        await new Promise((r) => setTimeout(r, AUTO_MONITOR_BACKOFF_MS));
       }
     });
     return true;

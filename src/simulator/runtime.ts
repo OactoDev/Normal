@@ -7,7 +7,8 @@ import {
   InjectScenarioRequest, ScenarioGroundTruth, SimulatorRun, SimulatorTickRequest, SimulatorTickResponse,
 } from "@normal/contracts";
 import { COLLECTIONS, ensureIndexes } from "@/lib/collections";
-import { getDb } from "@/lib/mongodb";
+import { getDb, describeDbError } from "@/lib/mongodb";
+import { publishCommittedWindows } from "@/simulator/monitoring";
 import { getReferenceCatalogue } from "@/reference/service";
 import { createInitialWorld } from "@/simulator/bootstrap";
 import { DEFAULT_BUSINESS_ID, DEFAULT_BUSINESS_NAME, DEFAULT_MINUTES_PER_TICK, DEFAULT_VIRTUAL_START } from "@/simulator/config";
@@ -175,7 +176,7 @@ export async function tickRun(input: unknown, options: TickOptions): Promise<Sim
   const exists = await loadState(d, businessId, req.simulationRunId);
   if (!exists) throw new SimulatorError(`Run ${req.simulationRunId} not found`, "run_not_found", 404);
 
-  return withRunLock(d, businessId, req.simulationRunId, async () => {
+  const result = await withRunLock(d, businessId, req.simulationRunId, async () => {
     const state = (await loadState(d, businessId, req.simulationRunId))!;
     if (options.idempotencyKey) {
       const receipt = state.recentTickReceipts.find((r) => r.key === options.idempotencyKey);
@@ -231,6 +232,12 @@ export async function tickRun(input: unknown, options: TickOptions): Promise<Sim
     }
     return response;
   });
+  // The world and receipt are already durable and the inventory/run lock is released.
+  // A publication failure never turns a successful purchase/tick into a failed request;
+  // the durable clock and frozen publication range let the worker recover it.
+  try { await publishCommittedWindows(d, businessId, req.simulationRunId); }
+  catch (error) { console.error("[monitor-publication]", describeDbError(error)); }
+  return result;
 }
 
 /** Activates a canonical scenario by swapping the PRIVATE mechanistic parameters. */

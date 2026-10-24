@@ -1,7 +1,10 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "vitest";
 import { writeFileSync, appendFileSync } from "node:fs";
 import { DEV_SEEDS, HELD_OUT_ROUND_1, HELD_OUT_SEEDS, deliveryDelayWithHistory, negativeReviewEvidence, scoreScenario } from "@/intelligence/evaluation/evaluate";
-const OUT = "/private/tmp/claude-501/-Users-oacto-Normal/fd2b8c14-0a0f-4388-94ca-dc3bc687bbd8/scratchpad/probe14.txt";
+const OUT = join(mkdtempSync(join(tmpdir(), "normal-diagnostic-")), "probe14.txt");
 it("evidence", () => {
   writeFileSync(OUT, "");
   for (const seed of [...DEV_SEEDS, ...HELD_OUT_SEEDS, ...HELD_OUT_ROUND_1]) {

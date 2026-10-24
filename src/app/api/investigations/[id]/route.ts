@@ -12,7 +12,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/investigatio
   try {
     const { id } = await ctx.params;
     if (!/^[A-Za-z0-9_.-]{1,160}$/.test(id)) return apiError("validation_error", "Invalid investigation id", 400);
-    const bundle = await getInvestigationBundle(id);
+    const bundle = await getInvestigationBundle(id, undefined, Object.fromEntries(new URL(request.url).searchParams));
     if (!bundle) return apiError("investigation_not_found", `Investigation ${id} not found`, 404);
     return Response.json(bundle);
   } catch (error) {

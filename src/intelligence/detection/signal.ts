@@ -203,7 +203,25 @@ export function evaluatePoint(def: SignalDef, trigger: Trigger, series: SignalSe
   const changePercent = expected !== 0 ? (delta / expected) * 100 : null;
   // Robust z against the spread, and for small expected counts an exact binomial/Poisson tail converted to a
   // z-equivalent. The more conservative of the two is used: small samples never look more significant than they are.
-  const zRobust = baseline.spread > 0 ? delta / baseline.spread : null;
+  let zRobust = baseline.spread > 0 ? delta / baseline.spread : null;
+  let residualMethod = "linear robust residual";
+  // Counts and proportions are asymmetric near zero. A symmetric normal residual
+  // understates sustained declines (and can make a near-total loss undetectable).
+  // Use signed root deviance for business flows, retaining the robust spread,
+  // dispersion and baseline-estimation uncertainty as variance inflation.
+  if (dispersionClass === "flow" && delta < 0 && expected > 0 && zRobust !== null) {
+    if (def.kind === "count" || def.kind === "money") {
+      const ratio = Math.max(0, actual / expected);
+      const deviance = 2 * (ratio === 0 ? 1 : ratio * Math.log(ratio) - ratio + 1);
+      zRobust *= Math.sqrt(deviance) / Math.abs(ratio - 1);
+      residualMethod = "signed Poisson deviance with robust variance inflation";
+    } else if (def.kind === "rate" && expected < 1 && actual >= 0 && actual < 1) {
+      const kl = (actual === 0 ? 0 : actual * Math.log(actual / expected))
+        + (1 - actual) * Math.log((1 - actual) / (1 - expected));
+      zRobust *= Math.sqrt(2 * kl * expected * (1 - expected)) / Math.abs(delta);
+      residualMethod = "signed binomial deviance with robust variance inflation";
+    }
+  }
   let zExact: number | null = null;
   let test = "robust z";
   const informative = baseline.samples.filter((x) => def.kind !== "rate" || x.denominator > 0);
@@ -236,7 +254,7 @@ export function evaluatePoint(def: SignalDef, trigger: Trigger, series: SignalSe
     ok: true, at, window, actual, expected, delta, changePercent: changePercent === null ? null : round(changePercent, 2), z: z === null ? null : round(z, 3),
     currentNumerator: num, currentDenominator: den, baseline, checks, triggered, strength: round(strength, 4),
     cleared: !checks.direction || strength < config.clearRatio,
-    details: { zRobust: zRobust === null ? null : round(zRobust, 3), zExact: zExact === null ? null : round(zExact, 3), significanceTest: test,
+    details: { zRobust: zRobust === null ? null : round(zRobust, 3), zExact: zExact === null ? null : round(zExact, 3), significanceTest: test, residualMethod,
       zRequired: round(zRequired, 3), dispersion: phi, segmentsTested: segKind === "global" ? 1 : series.segments(segKind as "campaign" | "product" | "channel" | "category").length },
   };
 }

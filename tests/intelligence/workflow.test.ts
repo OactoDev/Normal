@@ -82,7 +82,7 @@ describe("end-to-end detection workflow (Milestone 6)", () => {
   });
 
   it("13-14. the investigation is retrievable through its API and its evidence references resolve", async () => {
-    const res = await investigationRoute(new Request(`http://localhost/api/investigations/${investigationId}`, { headers: { "x-normal-demo-key": DEMO_KEY } }), { params: Promise.resolve({ id: investigationId }) });
+    const res = await investigationRoute(new Request(`http://localhost/api/investigations/${investigationId}?businessId=${TEST_BUSINESS}&simulationRunId=${RUN}`, { headers: { "x-normal-demo-key": DEMO_KEY } }), { params: Promise.resolve({ id: investigationId }) });
     expect(res.status).toBe(200);
     const bundle = await res.json();
     expect(Investigation.safeParse(bundle.investigation).success).toBe(true);

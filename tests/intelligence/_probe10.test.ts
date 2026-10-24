@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "vitest";
 import { writeFileSync, appendFileSync } from "node:fs";
 import { Anomaly } from "@normal/contracts";
@@ -6,7 +9,7 @@ import { COLLECTIONS } from "@/lib/collections";
 import { computeSnapshots } from "@/analytics/metrics";
 import type { FindingDoc } from "@/intelligence/detection/persistence";
 import { TEST_BUSINESS } from "../helpers";
-const OUT = "/private/tmp/claude-501/-Users-oacto-Normal/fd2b8c14-0a0f-4388-94ca-dc3bc687bbd8/scratchpad/probe10.txt";
+const OUT = join(mkdtempSync(join(tmpdir(), "normal-diagnostic-")), "probe10.txt");
 it("diag", async () => {
   writeFileSync(OUT, "");
   const db = await getDb();

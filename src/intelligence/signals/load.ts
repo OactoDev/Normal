@@ -19,14 +19,16 @@ export interface ObservationHorizon {
 export async function loadHorizon(db: Db, businessId: string, simulationRunId: string): Promise<ObservationHorizon | null> {
   const events = db.collection(COLLECTIONS.businessEvents);
   const filter = { businessId, simulationRunId, type: "ad.metrics_observed" };
-  const [last, first] = await Promise.all([
+  const [last, first, committed] = await Promise.all([
     events.find(filter, { projection: { _id: 0, "payload.window": 1 } }).sort({ occurredAt: -1 }).limit(1).next(),
     events.find(filter, { projection: { _id: 0, "payload.window": 1 } }).sort({ occurredAt: 1 }).limit(1).next(),
+    db.collection(COLLECTIONS.monitoringWindows).find({ businessId, simulationRunId, status: "ready" }, { projection: { windowEnd: 1 } }).sort({ windowEnd: -1 }).limit(1).next(),
   ]);
-  if (!last || !first) return null;
+  if (!last || !first || !committed) return null;
   const w = (d: Document) => (d.payload as { window: { startAt: string; endAt: string } }).window;
   const floor = (iso: string) => new Date(Math.floor(Date.parse(iso) / HOUR_MS) * HOUR_MS).toISOString();
-  return { historyStart: floor(w(first).startAt), watermark: floor(w(last).endAt) };
+  return { historyStart: new Date(Math.ceil(Date.parse(w(first).startAt) / HOUR_MS) * HOUR_MS).toISOString(),
+    watermark: floor(w(last).endAt < committed.windowEnd ? w(last).endAt : committed.windowEnd) };
 }
 
 const HOUR = (field: string): Document => ({ $dateToString: { date: { $dateTrunc: { date: { $toDate: field }, unit: "hour" } }, format: "%Y-%m-%dT%H:%M:%S.000Z" } });

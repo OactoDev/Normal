@@ -57,6 +57,7 @@ export async function deleteRun(db: Db, businessId: string, simulationRunId: str
     COLLECTIONS.simulatedStorefront, COLLECTIONS.simulatedMessages, COLLECTIONS.businessEvents, COLLECTIONS.metricSnapshots,
     COLLECTIONS.actionReceipts, COLLECTIONS.anomalies, COLLECTIONS.investigations, COLLECTIONS.detectionFindings,
     COLLECTIONS.detectionObservations, COLLECTIONS.incidents, COLLECTIONS.monitorRuns, COLLECTIONS.monitorState,
+    COLLECTIONS.monitoringWindows, COLLECTIONS.monitoringJobs,
   ].map((c) => db.collection(c).deleteMany(f)));
   await db.collection(COLLECTIONS.simulatorGroundTruth).deleteMany({ simulationRunId });
 }

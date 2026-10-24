@@ -32,6 +32,9 @@ export const COLLECTIONS = {
   incidents: "incidents",
   monitorRuns: "monitor_runs",
   monitorState: "monitor_state",
+  monitoringWindows: "monitoring_windows",
+  monitoringJobs: "monitoring_jobs",
+  monitoringWorkers: "monitoring_workers",
 } as const;
 
 let indexesReady: Promise<void> | undefined;
@@ -97,6 +100,12 @@ export function ensureIndexes(db?: Db): Promise<void> {
         d.collection(COLLECTIONS.monitorRuns).createIndex({ businessId: 1, simulationRunId: 1, asOf: 1 }, { unique: true }),
         d.collection(COLLECTIONS.monitorRuns).createIndex({ businessId: 1, simulationRunId: 1, lastScannedAt: -1 }),
         d.collection(COLLECTIONS.monitorState).createIndex({ businessId: 1, simulationRunId: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.monitoringWindows).createIndex({ windowKey: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.monitoringWindows).createIndex({ businessId: 1, simulationRunId: 1, windowEnd: 1 }),
+        d.collection(COLLECTIONS.monitoringJobs).createIndex({ jobKey: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.monitoringJobs).createIndex({ businessId: 1, simulationRunId: 1, windowEnd: 1, status: 1 }),
+        d.collection(COLLECTIONS.monitoringJobs).createIndex({ status: 1, nextAttemptAt: 1, leaseUntil: 1 }),
+        d.collection(COLLECTIONS.monitoringWorkers).createIndex({ workerId: 1 }, { unique: true }),
       ]);
     })().catch((error: unknown) => {
       indexesReady = undefined;

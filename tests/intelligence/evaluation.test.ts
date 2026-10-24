@@ -12,9 +12,11 @@ import {
  * Seeds: DEV (used for tuning), HELD_OUT_ROUND_1 (exposed false positives → methodology fix; no longer blind),
  * HELD_OUT_SEEDS (fresh blind round evaluated after the methodology was frozen).
  */
-const ALL = [...DEV_SEEDS, ...HELD_OUT_SEEDS, ...HELD_OUT_ROUND_1];
+const RECOVERY_TUNING_SEEDS = [17011, 28081];
+const RECOVERY_HELD_OUT_SEEDS = [61121, 73129];
+const ALL = [...DEV_SEEDS, ...HELD_OUT_SEEDS, ...HELD_OUT_ROUND_1, ...RECOVERY_TUNING_SEEDS, ...RECOVERY_HELD_OUT_SEEDS];
 const SCENARIOS = ["ad_fatigue", "delivery_delays", "viral_demand", "promo_checkout_failure", "negative_reviews"] as const;
-const group = (seed: number) => (DEV_SEEDS.includes(seed) ? "dev" : HELD_OUT_SEEDS.includes(seed) ? "held_out_blind" : "held_out_round_1");
+const group = (seed: number) => (DEV_SEEDS.includes(seed) ? "dev" : HELD_OUT_SEEDS.includes(seed) ? "held_out_blind" : RECOVERY_HELD_OUT_SEEDS.includes(seed) ? "recovery_held_out" : RECOVERY_TUNING_SEEDS.includes(seed) ? "recovery_tuning" : "held_out_round_1");
 
 describe("scenario evaluation (Milestone 5)", () => {
   const healthy: HealthyScore[] = ALL.map((seed) => scoreHealthy(seed, 24 * 10));
@@ -22,7 +24,7 @@ describe("scenario evaluation (Milestone 5)", () => {
   const evidence = new Map(ALL.map((seed) => [seed, negativeReviewEvidence(seed)]));
   const history = [42, 11, 808].map((seed) => ({ seed, with72h: deliveryDelayWithHistory(seed, 72), with168h: deliveryDelayWithHistory(seed, 168) }));
 
-  it("healthy operation: no investigation-worthy false positives on dev or blind held-out seeds; ≤1 per 110 run-days overall", () => {
+  it("healthy operation: no investigation-worthy false positives on dev or blind held-out seeds; ≤1 per 150 run-days overall", () => {
     for (const h of healthy.filter((x) => group(x.seed) !== "held_out_round_1")) expect(h.investigationWorthyIncidents, `seed ${h.seed}`).toBe(0);
     expect(healthy.reduce((a, h) => a + h.investigationWorthyIncidents, 0)).toBeLessThanOrEqual(1);
     expect(healthy.reduce((a, h) => a + h.findings.length, 0)).toBeLessThanOrEqual(3);
@@ -84,7 +86,7 @@ describe("scenario evaluation (Milestone 5)", () => {
     if (process.env.WRITE_DETECTION_REPORT !== "1") return;
     mkdirSync("docs/evaluation", { recursive: true });
     writeFileSync("docs/evaluation/detection-evaluation.json", JSON.stringify({
-      detectorVersion: DETECTOR_VERSION, generatedBy: "tests/intelligence/evaluation.test.ts", seeds: { dev: DEV_SEEDS, heldOutBlind: HELD_OUT_SEEDS, heldOutRound1: HELD_OUT_ROUND_1 },
+      detectorVersion: DETECTOR_VERSION, generatedBy: "tests/intelligence/evaluation.test.ts", seeds: { dev: DEV_SEEDS, heldOutBlind: HELD_OUT_SEEDS, heldOutRound1: HELD_OUT_ROUND_1, recoveryTuning: RECOVERY_TUNING_SEEDS, recoveryHeldOut: RECOVERY_HELD_OUT_SEEDS },
       setup: { healthyHoursBeforeInjection: 72, severity: 0.8, scenarioHours: SCENARIO_HOURS, healthyRunHours: 240 },
       healthy: healthy.map((h) => ({ ...h, group: group(h.seed) })),
       scenarios: Object.fromEntries([...scores].map(([k, v]) => [k, v.map((s) => ({ ...s, group: group(s.seed) }))])),

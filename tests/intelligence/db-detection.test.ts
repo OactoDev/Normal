@@ -224,7 +224,7 @@ describe("anomaly detection persistence and APIs (Milestone 4)", () => {
 
   it("the investigation bundle gives the next stage everything it needs, with no simulator internals", async () => {
     const inv = (await listInvestigations({ businessId: TEST_BUSINESS, simulationRunId: RUN_A })).items[0].investigation;
-    const bundle = (await getInvestigationBundle(inv.investigationId))!;
+    const bundle = (await getInvestigationBundle(inv.investigationId, undefined, { businessId: TEST_BUSINESS, simulationRunId: RUN_A }))!;
     expect(bundle.anomalies.map((a) => a.anomalyId).sort()).toEqual([...inv.anomalyIds].sort());
     expect(bundle.metricSnapshots.length).toBeGreaterThan(0);
     for (const s of bundle.metricSnapshots) expect(MetricSnapshot.safeParse(s).success).toBe(true);
@@ -257,7 +257,7 @@ describe("anomaly detection persistence and APIs (Milestone 4)", () => {
     await runMonitor({ businessId: TEST_BUSINESS, simulationRunId: RUN_A, dryRun: true }, { db: spy });
     await runMonitor({ businessId: TEST_BUSINESS, simulationRunId: RUN_A }, { db: spy });
     const allowed = new Set([COLLECTIONS.businessEvents, COLLECTIONS.simulatedProducts, COLLECTIONS.metricSnapshots, COLLECTIONS.anomalies, COLLECTIONS.investigations,
-      COLLECTIONS.detectionFindings, COLLECTIONS.detectionObservations, COLLECTIONS.incidents, COLLECTIONS.monitorRuns, COLLECTIONS.monitorState]);
+      COLLECTIONS.detectionFindings, COLLECTIONS.detectionObservations, COLLECTIONS.incidents, COLLECTIONS.monitorRuns, COLLECTIONS.monitorState, COLLECTIONS.monitoringWindows]);
     for (const name of accessed.keys()) expect(allowed.has(name as never), `unexpected collection ${name}`).toBe(true);
     for (const forbidden of [COLLECTIONS.simulatorState, COLLECTIONS.simulatorGroundTruth, COLLECTIONS.simulatedCustomers, COLLECTIONS.simulatedShipments, COLLECTIONS.simulatedReviews, COLLECTIONS.simulatedCampaigns]) {
       expect(accessed.has(forbidden)).toBe(false);
@@ -265,6 +265,25 @@ describe("anomaly detection persistence and APIs (Milestone 4)", () => {
     for (const e of accessed.get(COLLECTIONS.simulatedProducts) ?? []) expect(e.projection).toEqual(CATALOGUE_PROJECTION);
     const lookups = new Set([...accessed.values()].flat().flatMap((e) => e.lookups ?? []));
     for (const l of lookups) expect([COLLECTIONS.businessEvents, COLLECTIONS.simulatedOrders, COLLECTIONS.simulatedSessions]).toContain(l);
+  });
+
+  it("a crash during incident publication rolls back the graph and a retry preserves IDs", async () => {
+    const before = await counts(db, RUN_A);
+    const spy = new Proxy(db, { get(target, prop, receiver) {
+      if (prop !== "collection") return Reflect.get(target, prop, receiver);
+      return (name: string) => {
+        const col = target.collection(name);
+        return new Proxy(col, { get(c, p, r) {
+          if (name === COLLECTIONS.anomalies && p === "bulkWrite") return async () => { throw new Error("injected publication crash"); };
+          const value = Reflect.get(c, p, r);
+          return typeof value === "function" ? value.bind(c) : value;
+        } });
+      };
+    } }) as Db;
+    await expect(runMonitor({ businessId: TEST_BUSINESS, simulationRunId: RUN_A }, { db: spy })).rejects.toThrow("injected publication crash");
+    expect(await counts(db, RUN_A)).toEqual(before);
+    await runMonitor({ businessId: TEST_BUSINESS, simulationRunId: RUN_A }, { db });
+    expect(await counts(db, RUN_A)).toEqual(before);
   });
 
   it("monitoring never mutates business state", async () => {
@@ -300,9 +319,11 @@ describe("anomaly detection persistence and APIs (Milestone 4)", () => {
     const invs = await (await investigationsRoute(req(`/investigations?businessId=${TEST_BUSINESS}&simulationRunId=${RUN_A}`))).json();
     expect(invs.items).toHaveLength(1);
     const id = invs.items[0].investigation.investigationId;
-    const one = await investigationRoute(req(`/investigations/${id}`), { params: Promise.resolve({ id }) });
+    const one = await investigationRoute(req(`/investigations/${id}?businessId=${TEST_BUSINESS}&simulationRunId=${RUN_A}`), { params: Promise.resolve({ id }) });
     expect(one.status).toBe(200);
     expect(Investigation.safeParse((await one.json()).investigation).success).toBe(true);
+    expect((await investigationRoute(req(`/investigations/${id}?businessId=other_business`), { params: Promise.resolve({ id }) })).status).toBe(404);
+    expect((await investigationRoute(req(`/investigations/${id}?businessId=${TEST_BUSINESS}&simulationRunId=${RUN_B}`), { params: Promise.resolve({ id }) })).status).toBe(404);
     expect((await investigationRoute(req("/investigations/inv_missing"), { params: Promise.resolve({ id: "inv_missing" }) })).status).toBe(404);
     const incidents = await (await incidentsRoute(req(`/incidents?businessId=${TEST_BUSINESS}&simulationRunId=${RUN_A}`))).json();
     expect(incidents.items[0].investigationPolicy.qualifies).toBe(true);

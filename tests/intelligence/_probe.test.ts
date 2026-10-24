@@ -1,6 +1,9 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "vitest";
 import { appendFileSync, writeFileSync } from "node:fs";
-const OUT = "/private/tmp/claude-501/-Users-oacto-Normal/fd2b8c14-0a0f-4388-94ca-dc3bc687bbd8/scratchpad/probe.txt";
+const OUT = join(mkdtempSync(join(tmpdir(), "normal-diagnostic-")), "probe.txt");
 const log = (s: string) => appendFileSync(OUT, s + "\n");
 import { detectTimeline, simulate } from "@/intelligence/evaluation/harness";
 

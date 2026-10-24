@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { readJson } from "@/lib/api";
 import { guardDevRoute, handleRouteError } from "@/lib/route-helpers";
-import { monitorStatus, runMonitor } from "@/intelligence/monitor";
+import { monitorStatus } from "@/intelligence/monitor";
+import { runScheduledMonitor } from "@/intelligence/monitoring/manual";
 
 /**
  * POST /api/dev/monitor/run — runs anomaly detection for an existing run (dev/demo only).
@@ -11,7 +12,7 @@ export async function POST(request: Request): Promise<Response> {
   const denied = guardDevRoute(request);
   if (denied) return denied;
   try {
-    return Response.json(await runMonitor((await readJson(request)) ?? {}));
+    return Response.json(await runScheduledMonitor((await readJson(request)) ?? {}));
   } catch (error) {
     return handleRouteError(error, "monitor/run");
   }
