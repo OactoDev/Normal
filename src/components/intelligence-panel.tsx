@@ -283,7 +283,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
                       <span className="font-mono text-amber-300">{anom.metric}</span>
                     </div>
                     <span className="text-amber-400/80 font-mono">
-                      severity: {Math.round(anom.severity * 100)}%
+                      severity: {anom.severity}
                     </span>
                   </div>
                 ))}
