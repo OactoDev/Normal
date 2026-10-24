@@ -252,8 +252,8 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-2" aria-label="Delivery policy scenarios">
-              <button type="button" data-testid="sapling-scenario-supported" onClick={() => handleSimulate(0.85, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-emerald-500/15 disabled:opacity-50">14 late orders · test pass</button>
-              <button type="button" data-testid="sapling-scenario-blocked" onClick={() => handleSimulate(0.15, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs font-medium text-rose-300 hover:bg-rose-500/15 disabled:opacity-50">8 late orders · test block</button>
+              <button type="button" data-testid="sapling-scenario-supported" onClick={() => handleSimulate(0.85, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">14 late orders</button>
+              <button type="button" data-testid="sapling-scenario-blocked" onClick={() => handleSimulate(0.15, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">8 late orders</button>
             </div>
 
             <button

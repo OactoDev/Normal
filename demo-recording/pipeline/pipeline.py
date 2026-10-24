@@ -41,14 +41,14 @@ def tts(config, work):
 
     def one(index_scene):
         i, scene = index_scene
-        cache_key = hashlib.sha256(json.dumps([voice, model, scene["narration"]], ensure_ascii=False).encode()).hexdigest()[:16]
+        settings = config.get("voiceSettings", {"stability": 0.48, "similarity_boost": 0.80, "style": 0.18, "use_speaker_boost": True})
+        cache_key = hashlib.sha256(json.dumps([voice, model, settings, scene["narration"]], ensure_ascii=False).encode()).hexdigest()[:16]
         audio = audio_dir / f"{i:02d}-{scene['id']}-{cache_key}.mp3"
         if not audio.is_file():
             req = urllib.request.Request(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
                 data=json.dumps({"text": scene["narration"], "model_id": model,
-                                 "voice_settings": {"stability": 0.48, "similarity_boost": 0.80,
-                                                    "style": 0.18, "use_speaker_boost": True}}).encode(),
+                                 "voice_settings": settings}).encode(),
                 headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/mpeg"},
                 method="POST")
             try:
@@ -162,6 +162,18 @@ def caption_assets(config, work):
     return assets
 
 
+def composite_plain(config, work, output):
+    duration = json.loads((work / "durations.json").read_text())["totalSeconds"]
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", work / "screen_raw.webm", "-i", work / "narration.wav",
+         "-filter_complex", f"[0:v]scale=1920:1200:flags=lanczos,setsar=1,fps=25[v];[1:a]afade=t=in:st=0:d=0.12,afade=t=out:st={max(0,duration-.3):.6f}:d=0.3[a]",
+         "-map", "[v]", "-map", "[a]", "-t", str(duration), "-c:v", "libx264", "-preset", os.environ.get("VIDEO_PRESET", "fast"),
+         "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output])
+    actual = probe(output)
+    save_json(work / "verification.json", {"durationSeconds": actual, "bytes": output.stat().st_size, "lipSync": False,
+        "faceMode": "none (plain: screen and narration only)", "output": str(output)})
+    print(f"Video ready: {output} ({actual:.2f} s)", flush=True)
+
+
 def composite(config, work, face, output, synced):
     timing = json.loads((work / "durations.json").read_text())
     duration = timing["totalSeconds"]
@@ -246,6 +258,9 @@ def main():
     if not args.composite_only:
         tts(config, work)
         record(config_path, work)
+    if config.get("plain"):
+        composite_plain(config, work, output)
+        return
     synced = args.synced_face
     if not args.no_lipsync and not synced:
         synced = lipsync(args.face.resolve(), work)
