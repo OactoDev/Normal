@@ -8,10 +8,10 @@ import {
 import { orchestrator } from "../agents/orchestrator";
 
 export class PlanGenerator {
-  public generatePlan(
+  public async generatePlan(
     diagnosis: DiagnosisT,
     evidence: EvidenceT[]
-  ): PlanHandoffT {
+  ): Promise<PlanHandoffT> {
     const planId = `plan_${Date.now()}`;
     const now = new Date().toISOString();
     const primaryCause = diagnosis.output.primaryCause;
@@ -163,7 +163,7 @@ export class PlanGenerator {
     };
 
     // Store in orchestrator so GET /api/plans/:planId serves it immediately
-    orchestrator.saveHandoff(handoff);
+    await orchestrator.saveHandoff(handoff);
 
     return handoff;
   }

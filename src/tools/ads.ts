@@ -1,57 +1,10 @@
-import { simulatorState } from "../simulator/state";
-
-export interface SetDailyBudgetParams {
-  campaignId: string;
-  newDailyBudgetMinor: number;
-  currency: string;
-}
-
-export interface SetDailyBudgetResult {
-  campaignId: string;
-  previousBudgetMinor: number;
-  newBudgetMinor: number;
-  currency: string;
-  verified: boolean;
-  verificationDetails: string;
-  providerOperationId: string;
-}
-
-export async function executeSetDailyBudget(
-  params: SetDailyBudgetParams
-): Promise<SetDailyBudgetResult> {
-  const { campaignId, newDailyBudgetMinor, currency } = params;
-
-  if (newDailyBudgetMinor <= 0) {
-    throw new Error(`Invalid budget: ${newDailyBudgetMinor}. Must be positive.`);
-  }
-
-  const existing = simulatorState.getCampaign(campaignId);
-  if (!existing) {
-    throw new Error(`Campaign ${campaignId} not found in connected ad platforms.`);
-  }
-
-  const previousBudget = existing.dailyBudgetMinor;
-
-  // 1. Perform state-changing operation on simulated Meta Ads platform
-  const updated = simulatorState.updateCampaignBudget(campaignId, newDailyBudgetMinor);
-
-  // 2. Read-back verification: query service again to confirm new value is stored
-  const verifiedCampaign = simulatorState.getCampaign(campaignId);
-  const isVerified = verifiedCampaign?.dailyBudgetMinor === newDailyBudgetMinor;
-
-  if (!isVerified) {
-    throw new Error(
-      `Read-back verification failed: Expected budget ${newDailyBudgetMinor}, but got ${verifiedCampaign?.dailyBudgetMinor}`
-    );
-  }
-
-  return {
-    campaignId,
-    previousBudgetMinor: previousBudget,
-    newBudgetMinor: newDailyBudgetMinor,
-    currency,
-    verified: true,
-    verificationDetails: `Meta Ads API confirmed Campaign ${campaignId} budget updated from £${(previousBudget / 100).toFixed(2)} to £${(newDailyBudgetMinor / 100).toFixed(2)}`,
-    providerOperationId: `meta_act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-  };
+import { BudgetParams } from "../execution/action-params";
+import { campaigns } from "../store/repos";
+import { ToolError } from "../execution/retry-policy";
+export async function executeSetDailyBudget(raw: unknown) {
+  const p = BudgetParams.parse(raw), before = await campaigns.findOne(p.campaignId);
+  if (!before || before.currency !== p.currency) throw new ToolError("CAMPAIGN_NOT_FOUND", "Campaign or currency mismatch");
+  if (p.newDailyBudgetMinor > Number(process.env.MAX_DAILY_BUDGET_MINOR || 10000) || Math.abs(p.newDailyBudgetMinor / before.dailyBudgetMinor - 1) > Number(process.env.MAX_BUDGET_CHANGE_PERCENT || 60)/100) throw new ToolError("BUDGET_POLICY", "Budget outside policy");
+  await campaigns.update(p.campaignId, { $set: { dailyBudgetMinor: p.newDailyBudgetMinor, updatedAt: new Date().toISOString() } });
+  return { previousBudgetMinor: before.dailyBudgetMinor, newBudgetMinor: p.newDailyBudgetMinor, currency: p.currency, campaignId: p.campaignId };
 }

@@ -1,55 +1,23 @@
-import { ActionProposalT } from "../contracts";
+import { ActionProposalT, ActionExecutionT, PlanHandoffT } from "../contracts";
+import { ToolError } from "./retry-policy";
 
-export interface ExecutionWave {
-  waveIndex: number;
-  actions: ActionProposalT[];
+/** Rejects plans with duplicate action IDs, missing dependencies or cycles. */
+export function validateGraph(h: PlanHandoffT) {
+  const visiting = new Set<string>(), visited = new Set<string>(), actions = new Map(h.plan.actions.map(a => [a.actionId, a]));
+  if (actions.size !== h.plan.actions.length) throw new ToolError("INVALID_GRAPH", "Duplicate action IDs");
+  function visit(id: string) {
+    if (visiting.has(id) || !actions.has(id)) throw new ToolError("INVALID_GRAPH", "Cyclic or missing dependency");
+    if (visited.has(id)) return;
+    visiting.add(id); actions.get(id)!.dependsOnActionIds.forEach(visit); visiting.delete(id); visited.add(id);
+  }
+  actions.forEach(a => visit(a.actionId));
 }
 
-export function resolveDependencyWaves(
-  actions: ActionProposalT[],
-  approvedActionIds: Set<string>
-): { waves: ExecutionWave[]; unexecutable: ActionProposalT[] } {
-  // Only consider actions that are approved
-  const targetActions = actions.filter((a) => approvedActionIds.has(a.actionId));
+export type Readiness = "ready" | "waiting" | "DEPENDENCY_NOT_APPROVED" | "DEPENDENCY_FAILED";
 
-  const completed = new Set<string>();
-  const remaining = new Map<string, ActionProposalT>();
-  for (const action of targetActions) {
-    remaining.set(action.actionId, action);
-  }
-
-  const waves: ExecutionWave[] = [];
-  let waveIndex = 0;
-
-  while (remaining.size > 0) {
-    const currentWaveActions: ActionProposalT[] = [];
-
-    for (const [actionId, action] of remaining.entries()) {
-      // Check if all dependencies are satisfied
-      const allDepsMet = action.dependsOnActionIds.every((depId) => completed.has(depId));
-      if (allDepsMet) {
-        currentWaveActions.push(action);
-      }
-    }
-
-    if (currentWaveActions.length === 0) {
-      // Circular dependency or depends on an action that was not approved
-      break;
-    }
-
-    for (const action of currentWaveActions) {
-      remaining.delete(action.actionId);
-      completed.add(action.actionId);
-    }
-
-    waves.push({
-      waveIndex,
-      actions: currentWaveActions,
-    });
-    waveIndex++;
-  }
-
-  const unexecutable = Array.from(remaining.values());
-
-  return { waves, unexecutable };
+/** An action may only run once every dependency was approved and has succeeded. */
+export function readiness(action: ActionProposalT, approvedActionIds: string[], byAction: Map<string, ActionExecutionT>): Readiness {
+  if (action.dependsOnActionIds.some(id => !approvedActionIds.includes(id))) return "DEPENDENCY_NOT_APPROVED";
+  if (action.dependsOnActionIds.some(id => ["failed", "cancelled"].includes(byAction.get(id)?.status))) return "DEPENDENCY_FAILED";
+  return action.dependsOnActionIds.every(id => byAction.get(id)?.status === "succeeded") ? "ready" : "waiting";
 }

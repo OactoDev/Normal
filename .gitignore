@@ -21,3 +21,7 @@ notifications/launchd.err.log
 cloudflare/node_modules/
 cloudflare/.wrangler/
 
+
+# CSV data store
+data/
+*.tsbuildinfo

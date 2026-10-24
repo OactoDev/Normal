@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const handoff = planGenerator.generatePlan(diagnosis, evidence);
+    const handoff = await planGenerator.generatePlan(diagnosis, evidence);
 
     return NextResponse.json({
       planId: handoff.plan.planId,

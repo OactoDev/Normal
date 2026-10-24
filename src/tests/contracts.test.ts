@@ -11,7 +11,7 @@ import { orchestrator } from "../agents/orchestrator";
 async function runContractsTest() {
   console.log("=== Testing Zod Data Contracts ===");
 
-  const plan = orchestrator.getPlan("plan_001");
+  const plan = await orchestrator.getPlan("plan_001");
   if (!plan) throw new Error("Default plan not found");
 
   // 1. Validate ProposedPlan

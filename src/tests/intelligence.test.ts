@@ -56,11 +56,11 @@ async function runIntelligenceTests() {
 
   // 5. Recovery Plan Generation
   console.log("5. Generating Recovery Plan...");
-  const handoff = planGenerator.generatePlan(diagnosisResult.diagnosis, packet.evidence);
+  const handoff = await planGenerator.generatePlan(diagnosisResult.diagnosis, packet.evidence);
   console.log(` - Plan ID: ${handoff.plan.planId}`);
   console.log(` - Objective: "${handoff.plan.objective}"`);
   console.log(` - Proposed actions: ${handoff.plan.actions.length}`);
-  const registered = orchestrator.getHandoff(handoff.plan.planId);
+  const registered = await orchestrator.getHandoff(handoff.plan.planId);
   if (!registered) {
     throw new Error("Expected plan to be registered in orchestrator");
   }

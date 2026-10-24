@@ -1,0 +1,8 @@
+"use client";
+import { useState,useEffect } from "react";
+type Ads = {campaigns:{campaignId:string;name:string;currency:string;dailyBudgetMinor:number;updatedAt:string}[];events:{eventId:string;occurredAt:string;payload:Record<string,unknown>}[]};
+export default function AdsManager() {
+  const [data,setData]=useState<Ads>({campaigns:[],events:[]}),[error,setError]=useState("");
+  useEffect(()=>{let live=true;const poll=async()=>{try{const r=await fetch("/api/sim/ads/campaigns");if(!r.ok)throw new Error("Ads unavailable");const b=await r.json();if(live){setData(b);setError("");}}catch(e){if(live)setError(String(e));}};void poll();const t=setInterval(poll,1000);return()=>{live=false;clearInterval(t);};},[]);
+  return <main className="min-h-screen bg-slate-950 text-white p-10 space-y-8"><a href="/" className="text-sky-400">← Operations cockpit</a><h1 className="text-3xl font-bold">Simulated Ads Manager</h1>{error&&<p role="alert">{error}</p>}{data.campaigns.map(c=><section key={c.campaignId} className="bg-slate-900 border border-slate-700 rounded-xl p-6"><h2 className="text-xl">{c.name}</h2><p className="text-4xl text-emerald-400 my-4">{new Intl.NumberFormat("en-GB",{style:"currency",currency:c.currency}).format(c.dailyBudgetMinor/100)}<span className="text-base"> / day</span></p><p className="text-xs text-slate-400">Read from sim_campaigns · {c.updatedAt}</p></section>)}<h2 className="text-xl">Change history</h2>{data.events.map(e=><p key={e.eventId} className="p-4 bg-slate-900 rounded">{e.occurredAt} · {String(e.payload.actionId)} · {String(e.payload.previousBudgetMinor)} → {String(e.payload.newBudgetMinor)} minor units</p>)}</main>;
+}

@@ -14,6 +14,10 @@ export interface SimulationState {
 }
 
 export class TelemetrySimulator {
+  public ingestExternalEvents(events: BusinessEventT[]): void {
+    const existing = new Set(this.state.events.map(e => e.eventId));
+    this.state.events.push(...events.filter(e => !existing.has(e.eventId)));
+  }
   private state: SimulationState;
 
   constructor() {
