@@ -17,6 +17,8 @@
     "preview:worker": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "test:d1": "tsx src/tests/d1.test.ts",
     "test:mubit-diagnosis": "tsx src/tests/mubit-diagnosis.test.ts",
+    "test:planner": "tsx src/tests/mubit-planner.test.ts",
+    "test:streaming": "tsx src/tests/mubit-streaming.test.ts",
     "test:documents": "tsx src/tests/static-documents.test.ts",
     "test:partner": "tsx src/tests/partner-integration.test.ts",
     "mubit:replay": "tsx --env-file=.env scripts/mubit-replay.ts"

@@ -19,7 +19,7 @@ import { RootCause } from "../contracts";
 import { SaplingPolicyGate } from "./sapling-policy-gate";
 
 interface IntelligencePanelProps {
-  onPlanGenerated: (planId: string) => void;
+  onPlanGenerated: (planId: string, plannerCall?: any) => void;
 }
 
 export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
@@ -34,14 +34,20 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
   const [diagnosisData, setDiagnosisData] = useState<any>(null);
   const [modelCall, setModelCall] = useState<any>(null);
   const [diagnosisError, setDiagnosisError] = useState("");
+  // Gemini's answer as it streams through Mubit, shown until the validated diagnosis arrives.
+  const [streamText, setStreamText] = useState("");
+  const [streamStarted, setStreamStarted] = useState(false);
   const [correctionCause, setCorrectionCause] = useState("delivery_delays");
   const [correctionNote, setCorrectionNote] = useState("");
   const [feedbackResult, setFeedbackResult] = useState<any>(null);
   const [feedbackError, setFeedbackError] = useState("");
   const [learning, setLearning] = useState<any>(null);
+  const [usage, setUsage] = useState<any>(null);
   // The diagnosis a merchant corrected, kept so the next Mubit call can be compared with it.
   const [correctedRun, setCorrectedRun] = useState<{ cause: string; requestId?: string } | null>(null);
   const [planBlock, setPlanBlock] = useState<any>(null);
+  // The AI planner's own error: the rules it broke, and the Mubit request that proposed it.
+  const [planError, setPlanError] = useState<{ message: string; requestId?: string; problems?: string[] } | null>(null);
 
   // Load initial simulation and Mubit learning status on mount
   useEffect(() => {
@@ -61,7 +67,17 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
     }
   };
 
+  const fetchUsage = async () => {
+    try {
+      const res = await fetch("/api/intelligence/mubit-usage", { cache: "no-store" });
+      if (res.ok) setUsage(await res.json());
+    } catch (e) {
+      console.error("Error fetching Mubit usage:", e);
+    }
+  };
+
   const fetchLearning = async () => {
+    void fetchUsage();
     try {
       const res = await fetch("/api/intelligence/feedback");
       if (res.ok) setLearning(await res.json());
@@ -95,14 +111,44 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
     }
   };
 
+  /** Reads the route's server-sent events: delta pieces, then a result or an error. */
+  const readDiagnosisStream = async (res: Response, onText: (text: string) => void) => {
+    if (!res.ok || !res.body || !res.headers.get("content-type")?.includes("text/event-stream")) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error?.message || "The AI diagnosis could not be completed. Please retry.");
+    }
+    const reader = res.body.getReader(), decoder = new TextDecoder();
+    let buffer = "", result: any = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let end;
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        const block = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+        const event = block.match(/^event: (.*)$/m)?.[1], raw = block.match(/^data: (.*)$/m)?.[1];
+        if (!event || !raw) continue;
+        const payload = JSON.parse(raw);
+        if (event === "started") setStreamStarted(true);
+        if (event === "delta") onText(payload.text);
+        if (event === "error") throw new Error(payload.message || "The AI diagnosis could not be completed. Please retry.");
+        if (event === "result") result = payload;
+      }
+      if (done) break;
+    }
+    if (!result) throw new Error("The AI diagnosis stream ended without a result. Please retry.");
+    return result;
+  };
+
   const handleDiagnose = async () => {
     setIsDiagnosing(true);
     setDiagnosisError("");
     setDiagnosisData(null);
     setModelCall(null);
     setPlanBlock(null);
+    setStreamText("");
+    setStreamStarted(false);
     try {
-      const res = await fetch("/api/intelligence/diagnose", {
+      const res = await fetch("/api/intelligence/diagnose?stream=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -110,9 +156,8 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
           evidence: simData?.evidence,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || "The AI diagnosis could not be completed. Please retry.");
-      if (res.ok) {
+      const data = await readDiagnosisStream(res, (text) => setStreamText((current) => current + text));
+      if (data) {
         setDiagnosisData(data.diagnosis);
         setModelCall(data.modelCall);
         setFeedbackResult(null);
@@ -132,6 +177,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
   const handleGeneratePlan = async () => {
     if (!diagnosisData) return;
     setIsGeneratingPlan(true);
+    setPlanError(null);
     try {
       const res = await fetch("/api/intelligence/generate-plan", {
         method: "POST",
@@ -143,10 +189,11 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
       });
       if (res.ok) {
         const data = await res.json();
-        onPlanGenerated(data.planId);
-      } else if (res.status === 409) {
-        const data = await res.json();
-        setPlanBlock(data.saplingCheck);
+        onPlanGenerated(data.planId, data.modelCall);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409 && data.saplingCheck) setPlanBlock(data.saplingCheck);
+        else setPlanError({ message: data.error?.message || `Plan generation failed (HTTP ${res.status}).`, requestId: data.error?.requestId, problems: data.error?.problems });
       }
     } catch (e) {
       console.error("Plan generation error:", e);
@@ -361,6 +408,12 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
             {isDiagnosing ? "Running AI Diagnosis via Mubit..." : "Run Mubit AI Diagnosis"}
           </button>
           {diagnosisError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{diagnosisError}</p>}
+          {isDiagnosing && (
+            <div data-testid="diagnosis-stream" className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
+              <p className="text-xs text-slate-500">gemini-4-argon is answering through Mubit (streamed){streamText ? ` · ${streamText.length} characters so far` : streamStarted ? " · connected, Gemini is reasoning before its first words" : " · connecting"}</p>
+              {streamText && <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-700">{streamText}</pre>}
+            </div>
+          )}
         </div>
       </div>
 
@@ -403,10 +456,11 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               </p>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <span className="text-xs text-slate-500 uppercase font-semibold">Model Provider</span>
-              <p className="text-base font-medium text-slate-800 mt-0.5">
-                {modelCall?.providerModel || "gemini-4-argon (Mubit)"}
+              <span className="text-xs text-slate-500 uppercase font-semibold">Answered by (as reported by Mubit)</span>
+              <p data-testid="model-reported" className="text-base font-medium text-slate-800 mt-0.5">
+                {modelCall?.providerModel || "gemini-4-argon"}{modelCall?.modelKind === "adapter" ? " · Mubit adapter" : ""}
               </p>
+              <p className="text-[11px] text-slate-500">Streamed via streamGenerateContent · fully recorded for training</p>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-xs text-slate-500 uppercase font-semibold">Banyan Sapling</span>
@@ -437,7 +491,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
                 Accept & Proceed to Orchestration
               </h4>
               <p className="text-xs text-slate-500">
-                Synthesize actionable recovery operations based on this diagnosis and dispatch to Aman&apos;s execution cockpit.
+                Gemini 4 Argon writes the recovery plan through Mubit (its own Mubit task). Every action is checked against the store&apos;s budget, order and banner rules before you see it.
               </p>
               <button
                 data-testid="sapling-plan-button"
@@ -449,6 +503,13 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
                 {saplingCheck?.blocked ? "Blocked by Banyan Sapling" : isGeneratingPlan ? "Generating Plan..." : "Synthesize Plan & Open Operations"}
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
+              {planError && (
+                <div data-testid="plan-error" className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800 space-y-1">
+                  <p className="font-medium">{planError.message}</p>
+                  {planError.problems?.map((problem) => <p key={problem}>· {problem}</p>)}
+                  {planError.requestId && <p className="text-red-600">Mubit request: {planError.requestId}</p>}
+                </div>
+              )}
             </div>
 
             {/* Merchant correction: becomes a labelled example in later Mubit calls of this task */}
@@ -553,6 +614,29 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               ))}
             </ul>
           )}
+        </div>
+      )}
+
+      {usage && (
+        <div data-testid="mubit-usage" className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-900">5. Mubit usage</h3>
+            <span className="text-xs text-slate-500">{usage.totalCalls} call{usage.totalCalls === 1 ? "" : "s"} recorded here · gemini-4-argon only</span>
+          </div>
+          <table className="w-full text-xs">
+            <thead className="text-left text-slate-500"><tr><th className="py-1 font-medium">Mubit task</th><th className="font-medium">Calls</th><th className="font-medium">Last request</th><th className="font-medium">Answered by</th></tr></thead>
+            <tbody className="font-mono text-[11px] text-slate-700">
+              {usage.tasks.map((task: any) => (
+                <tr key={task.taskKey} className="border-t border-slate-100">
+                  <td className="py-1.5 font-sans text-xs">{task.label}<span className="block text-[10px] text-slate-400">{task.fingerprint || "no calls yet"}</span></td>
+                  <td>{task.calls}</td>
+                  <td>{task.lastRequestId || "—"}</td>
+                  <td>{task.lastModel ? `${task.lastModel}${task.lastModelKind === "adapter" ? " (adapter)" : ""}` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[11px] text-slate-500">Each kind of call is its own Mubit task, so Mubit can train a separate adapter for it. Customer names never go to Mubit; health checks send <code>x-middleware-record: off</code> so they don&apos;t become training data. If Mubit starts answering a task with a trained adapter, the model it reports shows here.</p>
         </div>
       )}
     </div>

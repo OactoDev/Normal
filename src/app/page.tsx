@@ -11,6 +11,8 @@ const isActive = (s: ExecutionSnapshot | null) => !!s?.executions.some(e => e.st
 
 export default function NormalOperationsCockpit() {
   const [tab, setTab] = useState("intelligence"), [planId,setPlanId] = useState("plan_001");
+  // Which Mubit call wrote each AI plan, so Review can attribute it.
+  const [plannerCalls, setPlannerCalls] = useState<Record<string, any>>({});
   const [handoff,setHandoff] = useState<PlanHandoffT | null>(null), [principal,setPrincipal] = useState("merchant_owner_01");
   const [error,setError] = useState(""), [busy,setBusy] = useState(false);
   const { data, error: pollError, refresh } = usePlanExecutions(planId);
@@ -83,8 +85,8 @@ export default function NormalOperationsCockpit() {
       <p className="text-xs text-slate-500">Nike store simulation · {planId} · {data?.planStatus || handoff?.plan.status} {data?.needsAttention && "· Needs attention"}</p>
       {(error || pollError) && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || pollError}</div>}
       {changesRequested && (tab === "review" || tab === "control") && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-medium">Sent back for changes by {data.approval.reviewingPrincipal} · v{data.approval.planVersion}</p><p className="mt-1">“{data.changeRequestNote}”</p><p className="mt-1 text-xs text-amber-700">Nothing in this version will run. An edited plan needs a new version.</p></div>}
-      {tab === "intelligence" && <IntelligencePanel onPlanGenerated={async id=>{setPlanId(id);setTab("review");}} />}
-      {tab === "review" && (handoff ? <PlanReview key={`${planId}:${handoff.plan.planVersion}`} handoff={handoff} snapshot={data} approval={data?.approval && data.approval.planVersion === handoff.plan.planVersion ? data.approval : null} onApprove={approve} isApproving={busy} /> : <p>Loading plan…</p>)}
+      {tab === "intelligence" && <IntelligencePanel onPlanGenerated={async (id, plannerCall)=>{setPlannerCalls(calls=>({...calls,[id]:plannerCall}));setPlanId(id);setTab("review");}} />}
+      {tab === "review" && (handoff ? <PlanReview key={`${planId}:${handoff.plan.planVersion}`} handoff={handoff} plannerCall={plannerCalls[planId]} snapshot={data} approval={data?.approval && data.approval.planVersion === handoff.plan.planVersion ? data.approval : null} onApprove={approve} isApproving={busy} /> : <p>Loading plan…</p>)}
       {tab === "control" && <AgentMissionControl handoff={handoff} data={data} busy={busy} onExecute={execute} onReset={reset} onReview={()=>setTab("review")} />}
       {tab === "results" && <ExecutionResults handoff={handoff} data={data} />}
     </main>

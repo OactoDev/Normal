@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { planGenerator } from "../../../../intelligence/plan-generator";
 import { DiagnosisT, EvidenceT } from "../../../../contracts";
 import { SaplingBlockedError } from "../../../../intelligence/sapling-verifier";
+import { MubitPlanningError } from "../../../../intelligence/mubit-planner";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,13 +17,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const handoff = await planGenerator.generatePlan(diagnosis, evidence);
+    const { handoff, modelCall } = await planGenerator.generatePlan(diagnosis, evidence);
 
     return NextResponse.json({
       planId: handoff.plan.planId,
       handoff,
+      modelCall,
     });
   } catch (err: any) {
+    if (err instanceof MubitPlanningError) {
+      return NextResponse.json(
+        { error: { code: err.code, message: err.message, ...(err.requestId ? { requestId: err.requestId } : {}), ...(err.problems.length ? { problems: err.problems } : {}) } },
+        { status: err.status }
+      );
+    }
     if (err instanceof SaplingBlockedError) {
       return NextResponse.json(
         { error: { code: "SAPLING_BLOCKED", message: err.message }, saplingCheck: err.check },

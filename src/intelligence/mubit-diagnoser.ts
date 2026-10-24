@@ -9,7 +9,7 @@ import {
   RootCause,
 } from "../contracts";
 import { saplingVerifier } from "./sapling-verifier";
-import { mubitModel, mubitRequest, readMubitReply } from "../llm/mubit";
+import { modelKindOf, mubitModel, mubitRequest, readMubitReply, readMubitStream, recordModelCall, fetchMubit } from "../llm/mubit";
 
 export interface DiagnosisExecutionResult {
   diagnosis: DiagnosisT;
@@ -40,10 +40,14 @@ export function diagnosisTaskFingerprint(model = diagnosisModel()) {
 /** Mubit names a task after the first words of its instructions in the console. */
 export const DIAGNOSIS_TASK_CONSOLE_NAME = DIAGNOSIS_INSTRUCTIONS.split(" ").slice(0, 6).join(" ");
 
-export function diagnosisRequest(evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], model = diagnosisModel(), apiKey?: string) {
+export function diagnosisRequest(evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], model = diagnosisModel(), apiKey?: string, stream = false) {
+  // Temperature doesn't split a Mubit task. At 0 Gemini answers the same evidence the same way, which gives the
+  // adapter one consistent answer to learn and be tested against.
   return mubitRequest({
     maxTokens: 2048,
     json: true,
+    temperature: 0,
+    stream,
     system: DIAGNOSIS_INSTRUCTIONS,
     user: JSON.stringify({
         evidence: evidence.map(item => ({ evidenceId: item.evidenceId, observedFact: item.observedFact, measurements: item.measurements })),
@@ -58,16 +62,17 @@ export function diagnosisRequest(evidence: EvidenceT[], corrections: CorrectionR
 }
 
 export class MubitDiagnoser {
-  public async diagnose(investigation: InvestigationT, evidence: EvidenceT[], corrections: CorrectionRecordT[] = []): Promise<DiagnosisExecutionResult> {
+  /** With onText, the answer streams through Mubit and each piece is passed on as it arrives; validation is the same. */
+  public async diagnose(investigation: InvestigationT, evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], onText?: (text: string) => void): Promise<DiagnosisExecutionResult> {
     const apiKey = process.env.MUBIT_API_KEY;
     if (!apiKey) throw new MubitDiagnosisError("MUBIT_NOT_CONFIGURED", "AI diagnosis is not configured. Please contact the demo owner.", 503);
     const model = diagnosisModel();
     const applied = corrections.slice(0, MAX_CORRECTION_EXAMPLES);
-    const request = diagnosisRequest(evidence, applied, model, apiKey);
+    const request = diagnosisRequest(evidence, applied, model, apiKey, Boolean(onText));
     const started = Date.now();
     let response: Response;
     try {
-      response = await fetch(request.url, {
+      response = await fetchMubit(request.url, {
         method: "POST",
         headers: request.headers,
         signal: AbortSignal.timeout(45000),
@@ -88,7 +93,7 @@ export class MubitDiagnoser {
     let reply: ReturnType<typeof readMubitReply>;
     let output: ReturnType<typeof DiagnosisModelOutput.parse>;
     try {
-      reply = readMubitReply(await response.json(), model);
+      reply = onText ? await readMubitStream(response, onText, model) : readMubitReply(await response.json(), model);
       if (!reply.content?.trim() || !reply.complete) throw new Error("Incomplete response");
       output = DiagnosisModelOutput.parse(JSON.parse(reply.content));
       const allowed = new Set(evidence.map(item => item.evidenceId));
@@ -106,12 +111,13 @@ export class MubitDiagnoser {
       taskKey: "normal_incident_diagnosis", promptVersion: "v1.4",
       instructionsFingerprint: diagnosisTaskFingerprint(model),
       route: "mubit", providerModel: reply.model,
-      modelKind: "provider", sessionId: investigation.investigationId,
+      modelKind: modelKindOf(reply.model, model), sessionId: investigation.investigationId,
       inputEvidenceIds: evidence.map(item => item.evidenceId), mubitRequestId: requestId,
       appliedCorrectionIds: applied.map(record => record.correction.correctionId),
       inputTokens: reply.inputTokens, outputTokens: reply.outputTokens,
       latencyMs, createdAt: now,
     };
+    await recordModelCall(modelCall);
     return {
       modelCall,
       diagnosis: {

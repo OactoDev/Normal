@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Repo } from "./db";
-import { PlanHandoff, PlanApproval, AgentMission, ActionExecution, ActionOutcome, BusinessEvent, CorrectionRecord } from "../contracts";
+import { PlanHandoff, PlanApproval, AgentMission, ActionExecution, ActionOutcome, BusinessEvent, CorrectionRecord, ModelCall } from "../contracts";
 export const handoffs = new Repo("plan_handoffs", PlanHandoff);
 export const ApprovalRecord = z.object({ approval: PlanApproval, _meta: z.object({ businessId: z.string(), expiresAt: z.string().datetime(), note: z.string().optional() }) }).strict();
 export type ApprovalRecordT = z.infer<typeof ApprovalRecord>;
@@ -27,5 +27,7 @@ export const adMetrics = new Repo("sim_ad_metrics", AdMetric);
 export const Product = z.object({ productId: z.string(), name: z.string(), priceMinor: z.number().int().positive(), stock: z.number().int().nonnegative(), dailyDemand: z.number().positive(), simulated: z.literal(true) }).strict();
 export const products = new Repo("sim_products", Product);
 export const corrections = new Repo("model_corrections", CorrectionRecord);
+// Every call the app sends through Mubit (diagnosis, planning, email drafts), for the Mubit usage card.
+export const modelCalls = new Repo("model_calls", ModelCall);
 export const IngestForward = z.object({ eventId: z.string(), planId: z.string(), type: z.string(), status: z.enum(["accepted", "duplicate", "rejected", "failed", "skipped"]), attempts: z.number().int().nonnegative(), event: z.record(z.unknown()).optional(), error: z.string().optional(), updatedAt: z.string().datetime() }).strict();
 export const ingestForwards = new Repo("ingest_forwards", IngestForward);

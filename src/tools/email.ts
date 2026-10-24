@@ -15,7 +15,7 @@ export async function executeSendDelayNotice(raw: unknown, context: { planId: st
     const key = `${context.idempotencyKey}:${order.orderId}`, existing = await emails.findOne(key);
     if (existing && ["accepted", "delivered"].includes(existing.status)) continue;
     if (existing && ["sending", "ambiguous"].includes(existing.status)) throw new ToolError("EMAIL_AMBIGUOUS", `Send for ${order.orderId} requires provider reconciliation; not resent`, false, true);
-    const draft = await draftParagraph({ customerName: order.customerName, orderId: order.orderId, carrier: order.carrier, items: order.items });
+    const draft = await draftParagraph({ orderId: order.orderId, carrier: order.carrier, items: order.items });
     const record = { key, planId: context.planId, actionId: context.actionId, orderId: order.orderId, status: "sending" as const, provider, to, subject: `${shippingDelayTemplate.subject} [intended for ${order.customerName}]`, body: shippingDelayTemplate.render(order.customerName, order.orderId, draft.paragraph), modelUsed: draft.modelUsed, sentAt: new Date().toISOString() };
     const claimed = existing ? await emails.compareAndSet(key, { status: "failed" }, record) : await emails.claim(key,record);
     if (!claimed) throw new ToolError("EMAIL_IN_PROGRESS", "Recipient is already claimed", false, true);

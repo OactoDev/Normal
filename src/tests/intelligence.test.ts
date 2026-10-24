@@ -3,6 +3,7 @@ import { anomalyDetector } from "../intelligence/anomaly-detector";
 import { evidenceCollector } from "../intelligence/evidence-collector";
 import { DIAGNOSIS_INSTRUCTIONS, mubitDiagnoser } from "../intelligence/mubit-diagnoser";
 import { planGenerator } from "../intelligence/plan-generator";
+import { PLANNER_INSTRUCTIONS } from "../intelligence/mubit-planner";
 import { feedbackPipeline } from "../intelligence/feedback-pipeline";
 import { benchmarkEvaluator } from "../intelligence/benchmark-evaluator";
 import { orchestrator } from "../agents/orchestrator";
@@ -46,14 +47,12 @@ async function runIntelligenceTests() {
 
   // 4. Mubit AI Diagnosis
   console.log("4. Running AI Diagnosis via Mubit proxy...");
-  // Mubit's OpenAI route and its native Gemini route take and return different shapes.
-  const isDiagnosisCall = (url: unknown) => /\/chat\/completions$|:generateContent$/.test(String(url));
-  const mockDiagnosisReply = (url: unknown, content: string, init?: ResponseInit) => Response.json(String(url).endsWith(":generateContent")
-    ? { modelVersion: "mock-diagnosis-model", candidates: [{ content: { parts: [{ text: content }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 } }
-    : { model: "mock-diagnosis-model", choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 50 } }, init);
-  const systemOf = (body: any) => body.messages?.[0]?.content ?? body.systemInstruction?.parts?.[0]?.text;
-  const userOf = (body: any) => body.messages?.[1]?.content ?? body.contents?.[0]?.parts?.[0]?.text;
-  const formatOf = (body: any) => JSON.stringify(body.response_format ?? body.generationConfig?.responseMimeType);
+  const isDiagnosisCall = (url: unknown) => String(url).endsWith(":generateContent");
+  const mockDiagnosisReply = (_url: unknown, content: string, init?: ResponseInit) => Response.json(
+    { modelVersion: "mock-diagnosis-model", candidates: [{ content: { parts: [{ text: content }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 } }, init);
+  const systemOf = (body: any) => body.systemInstruction?.parts?.[0]?.text;
+  const userOf = (body: any) => body.contents?.[0]?.parts?.[0]?.text;
+  const formatOf = (body: any) => JSON.stringify(body.generationConfig?.responseMimeType);
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.MUBIT_API_KEY;
   let diagnosisResult;
@@ -92,7 +91,33 @@ async function runIntelligenceTests() {
 
   // 5. Recovery Plan Generation
   console.log("5. Generating Recovery Plan...");
-  const handoff = await planGenerator.generatePlan(diagnosisResult.diagnosis, packet.evidence);
+  let planned;
+  try {
+    if (!originalKey) {
+      // The planner is its own Mubit task: answer it with a policy-compliant plan for this contract test.
+      process.env.MUBIT_API_KEY = "test-placeholder";
+      const evidenceIds = packet.evidence.map(item => item.evidenceId);
+      globalThis.fetch = async (url, init) => {
+        if (isDiagnosisCall(url) && systemOf(JSON.parse(String(init?.body))) === PLANNER_INSTRUCTIONS) return mockDiagnosisReply(url, JSON.stringify({
+          objective: "Contain late deliveries and keep customers informed.", summary: "Synthetic provider plan for the contract test.",
+          actions: [
+            { actionType: "ads.set_daily_budget", title: "Lower Campaign A budget", rationale: "Fewer new orders while the carrier recovers.", evidenceIds, params: { campaignId: "campaign_A", newDailyBudgetMinor: 3000, currency: "GBP" } },
+            { actionType: "customer.send_delay_notice", title: "Tell delayed customers", rationale: "Orders are past their promised date.", evidenceIds, params: { orderIds: ["ord_001", "ord_002"], templateId: "shipping_delay_v1", maxRecipients: 2 } },
+            { actionType: "storefront.publish_banner", title: "Delivery notice", rationale: "Set expectations at checkout.", evidenceIds, params: { message: "Some deliveries are taking longer than usual. We will email you with updates.", durationHours: 48 } },
+          ],
+        }), { headers: { "x-middleware-request-id": "mreq_00000000000000000000000000000003" } });
+        return originalFetch(url, init);
+      };
+    }
+    planned = await planGenerator.generatePlan(diagnosisResult.diagnosis, packet.evidence);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.MUBIT_API_KEY; else process.env.MUBIT_API_KEY = originalKey;
+  }
+  const handoff = planned.handoff;
+  if (!/^mreq_[a-f0-9]{32}$/i.test(planned.modelCall.mubitRequestId || "")) throw new Error("Expected the planner's Mubit request ID");
+  if (planned.modelCall.taskKey !== "normal_recovery_planning") throw new Error("Expected the planner's own task key");
+  console.log(` - Planner Mubit request: ${planned.modelCall.mubitRequestId} (${planned.modelCall.providerModel})`);
   console.log(` - Plan ID: ${handoff.plan.planId}`);
   console.log(` - Objective: "${handoff.plan.objective}"`);
   console.log(` - Proposed actions: ${handoff.plan.actions.length}`);

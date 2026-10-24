@@ -3,136 +3,31 @@ import {
   EvidenceT,
   ProposedPlanT,
   PlanHandoffT,
-  ActionProposalT,
+  ModelCallT,
 } from "../contracts";
 import { orchestrator } from "../agents/orchestrator";
 import { SaplingBlockedError, saplingVerifier } from "./sapling-verifier";
+import { mubitPlanner } from "./mubit-planner";
 
 export class PlanGenerator {
   public async generatePlan(
     diagnosis: DiagnosisT,
     evidence: EvidenceT[]
-  ): Promise<PlanHandoffT> {
+  ): Promise<{ handoff: PlanHandoffT; modelCall: ModelCallT }> {
     // Re-verify server-side: the diagnosis arrives from the client, so its saplingCheck can't be trusted.
     const saplingCheck = await saplingVerifier.verifyDiagnosis(diagnosis.output, evidence);
     if (saplingCheck.blocked) throw new SaplingBlockedError(saplingCheck);
 
+    // The recovery actions come from Gemini through Mubit (its own Mubit task); the server enforces policy on them.
+    const { output, actions, modelCall } = await mubitPlanner.plan(diagnosis, evidence);
     const planId = `plan_${Date.now()}`;
     const now = new Date().toISOString();
-    const primaryCause = diagnosis.output.primaryCause;
-
-    const actions: ActionProposalT[] = [];
-
-    if (primaryCause === "delivery_delays") {
-      // 1. Marketing Agent: Lower Campaign A daily budget
-      actions.push({
-        requiresApproval: true,
-        dependsOnActionIds: [],
-        risk: "medium",
-        actionId: `act_ads_${Date.now()}`,
-        agent: "marketing",
-        title: "Lower Campaign A daily budget",
-        rationale: "Reduce paid traffic volume while carrier delivery backlog is cleared.",
-        evidenceIds: evidence.map((e) => e.evidenceId),
-        actionType: "ads.set_daily_budget",
-        params: {
-          campaignId: "campaign_A",
-          newDailyBudgetMinor: 3000,
-          currency: "GBP",
-        },
-      });
-
-      // 2. Customer Care Agent: Send proactive delivery notices
-      actions.push({
-        requiresApproval: true,
-        dependsOnActionIds: [],
-        risk: "medium",
-        actionId: `act_email_${Date.now()}`,
-        agent: "customer_care",
-        title: "Send targeted delivery notices",
-        rationale: "Notify impacted customers with live tracking links to mitigate negative sentiment.",
-        evidenceIds: evidence.map((e) => e.evidenceId),
-        actionType: "customer.send_delay_notice",
-        params: {
-          orderIds: ["ord_001", "ord_002"],
-          templateId: "shipping_delay_v1",
-          maxRecipients: 2,
-        },
-      });
-
-      // 3. Storefront Agent: Publish delivery warning banner
-      actions.push({
-        requiresApproval: true,
-        dependsOnActionIds: [],
-        risk: "medium",
-        actionId: `act_banner_${Date.now()}`,
-        agent: "storefront",
-        title: "Publish revised storefront delivery notice",
-        rationale: "Manage customer expectations at storefront entry and checkout.",
-        evidenceIds: evidence.map((e) => e.evidenceId),
-        actionType: "storefront.publish_banner",
-        params: {
-          bannerId: `banner_ship_${Date.now()}`,
-          message: "Delivery times for selected orders may take up to 48 hours longer than usual.",
-          startsAt: now,
-          expiresAt: new Date(Date.now() + 86400000 * 2).toISOString(),
-        },
-      });
-    } else if (primaryCause === "ad_fatigue" || primaryCause === "ad_inefficiency") {
-      actions.push({
-        requiresApproval: true,
-        dependsOnActionIds: [],
-        risk: "medium",
-        actionId: `act_ads_fatigue_${Date.now()}`,
-        agent: "marketing",
-        title: "Reduce fatigued ad campaign spend",
-        rationale: "Lower daily budget on Campaign A by 40% to prevent budget burn on fatigued audiences.",
-        evidenceIds: evidence.map((e) => e.evidenceId),
-        actionType: "ads.set_daily_budget",
-        params: {
-          campaignId: "campaign_A",
-          newDailyBudgetMinor: 2500,
-          currency: "GBP",
-        },
-      });
-    } else if (primaryCause === "checkout_failure") {
-      actions.push({
-        requiresApproval: true,
-        dependsOnActionIds: [],
-        risk: "medium",
-        actionId: `act_banner_chk_${Date.now()}`,
-        agent: "storefront",
-        title: "Publish checkout promotion notice",
-        rationale: "Alert customers that coupons are automatically applied at checkout while backend settles.",
-        evidenceIds: evidence.map((e) => e.evidenceId),
-        actionType: "storefront.publish_banner",
-        params: {
-          bannerId: `banner_chk_${Date.now()}`,
-          message: "Enjoy 20% off automatically at checkout today. No discount code needed!",
-          startsAt: now,
-          expiresAt: new Date(Date.now() + 86400000).toISOString(),
-        },
-      });
-    } else {
-      // Default fallback action
-      actions.push({
-        requiresApproval: true,
-        dependsOnActionIds: [],
-        risk: "low",
-        actionId: `act_banner_gen_${Date.now()}`,
-        agent: "storefront",
-        title: "Publish customer satisfaction notice",
-        rationale: "Maintain customer confidence during ongoing operational review.",
-        evidenceIds: evidence.map((e) => e.evidenceId),
-        actionType: "storefront.publish_banner",
-        params: {
-          bannerId: `banner_gen_${Date.now()}`,
-          message: "Our customer team is available 24/7 to assist with any order queries.",
-          startsAt: now,
-          expiresAt: new Date(Date.now() + 86400000).toISOString(),
-        },
-      });
-    }
+    const types = new Set(actions.map(action => action.actionType));
+    const successCriteria = [
+      ...(types.has("ads.set_daily_budget") ? [{ metric: "cac_minor", direction: "decrease" as const, measurementWindowMinutes: 120 }] : []),
+      ...(diagnosis.output.primaryCause === "delivery_delays" ? [{ metric: "late_delivery_rate", direction: "decrease" as const, measurementWindowMinutes: 240 }] : []),
+      ...(types.has("storefront.publish_banner") || types.has("customer.send_delay_notice") ? [{ metric: "support_tickets", direction: "decrease" as const, measurementWindowMinutes: 240 }] : []),
+    ];
 
     const proposedPlan: ProposedPlanT = {
       schemaVersion: 1,
@@ -142,21 +37,10 @@ export class PlanGenerator {
       investigationId: diagnosis.investigationId,
       diagnosisId: diagnosis.diagnosisId,
       status: "awaiting_approval",
-      objective: `Address ${primaryCause} to stabilize conversion and customer retention.`,
-      summary: `Propose ${actions.length} targeted interventions executed by specialist agents.`,
+      objective: output.objective,
+      summary: output.summary,
       actions,
-      successCriteria: [
-        {
-          metric: "cac_minor",
-          direction: "decrease",
-          measurementWindowMinutes: 120,
-        },
-        {
-          metric: "late_delivery_rate",
-          direction: "decrease",
-          measurementWindowMinutes: 240,
-        },
-      ],
+      successCriteria,
       createdAt: now,
       expiresAt: new Date(Date.now() + 86400000 * 2).toISOString(),
     };
@@ -170,7 +54,7 @@ export class PlanGenerator {
     // Store in orchestrator so GET /api/plans/:planId serves it immediately
     await orchestrator.saveHandoff(handoff);
 
-    return handoff;
+    return { handoff, modelCall };
   }
 }
 
