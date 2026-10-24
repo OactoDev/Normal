@@ -6,7 +6,7 @@ AI agents that run an online shop's operations, and check their own diagnosis ag
 |--|--|
 | **Live app** | [normal-ops.kiritokris.workers.dev](https://normal-ops.kiritokris.workers.dev) |
 | **Technical demo** | [normal-technical-demo.mp4](https://github.com/OactoDev/Normal/releases/download/demo-videos/normal-technical-demo.mp4) (1:44) |
-| **Ad** | [Watch the ad](https://claude.ai/artifact/GtFbfZtLQEdyqm31RjGdHk) (0:28) · [download](https://github.com/OactoDev/Normal/releases/download/demo-videos/normal-ad.mp4) |
+| **Ad** | [normal-ad.kiritokris.workers.dev](https://normal-ad.kiritokris.workers.dev) (0:28) · [download](https://github.com/OactoDev/Normal/releases/download/demo-videos/normal-ad.mp4) |
 
 ## How it works
 
