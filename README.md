@@ -21,4 +21,6 @@ Normal uses AI to diagnose business problems, decide which actions are appropria
 
 The goal is for Normal to become increasingly effective at understanding the types of problems businesses encounter repeatedly.
 
+# Architecture Flowchart
+
 <img width="5760" height="3240" alt="Architecture-2" src="https://github.com/user-attachments/assets/7fe85851-bedc-466a-84c1-6ab2cc665fc5" />
