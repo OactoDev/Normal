@@ -3,6 +3,7 @@ import { telemetrySimulator } from "../../../../intelligence/telemetry-simulator
 import { anomalyDetector } from "../../../../intelligence/anomaly-detector";
 import { evidenceCollector } from "../../../../intelligence/evidence-collector";
 import { MubitDiagnosisError, mubitDiagnoser } from "../../../../intelligence/mubit-diagnoser";
+import { feedbackPipeline } from "../../../../intelligence/feedback-pipeline";
 import { Evidence, Investigation } from "../../../../contracts";
 import { z } from "zod";
 
@@ -29,7 +30,10 @@ export async function POST(request: NextRequest) {
       evidence = packet.evidence;
     }
 
-    const result = await mubitDiagnoser.diagnose(Investigation.parse(investigation), z.array(Evidence).parse(evidence));
+    // Verified merchant corrections go to Mubit as labelled examples inside this same diagnosis task.
+    const parsedInvestigation = Investigation.parse(investigation);
+    const parsedEvidence = z.array(Evidence).parse(evidence);
+    const result = await mubitDiagnoser.diagnose(parsedInvestigation, parsedEvidence, await feedbackPipeline.examplesForDiagnosis());
 
     return NextResponse.json(result);
   } catch (err: any) {

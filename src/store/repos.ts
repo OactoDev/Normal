@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Repo } from "./db";
-import { PlanHandoff, PlanApproval, AgentMission, ActionExecution, ActionOutcome, BusinessEvent } from "../contracts";
+import { PlanHandoff, PlanApproval, AgentMission, ActionExecution, ActionOutcome, BusinessEvent, CorrectionRecord } from "../contracts";
 export const handoffs = new Repo("plan_handoffs", PlanHandoff);
 export const ApprovalRecord = z.object({ approval: PlanApproval, _meta: z.object({ businessId: z.string(), expiresAt: z.string().datetime(), note: z.string().optional() }) }).strict();
 export type ApprovalRecordT = z.infer<typeof ApprovalRecord>;
@@ -26,3 +26,4 @@ export const AdMetric = z.object({ metricId: z.string(), campaignId: z.string(),
 export const adMetrics = new Repo("sim_ad_metrics", AdMetric);
 export const Product = z.object({ productId: z.string(), name: z.string(), priceMinor: z.number().int().positive(), stock: z.number().int().nonnegative(), dailyDemand: z.number().positive(), simulated: z.literal(true) }).strict();
 export const products = new Repo("sim_products", Product);
+export const corrections = new Repo("model_corrections", CorrectionRecord);

@@ -1,103 +1,84 @@
-import { ModelCorrectionT, AdapterRecordT, RootCauseT } from "../contracts";
+import { randomUUID } from "node:crypto";
+import { CorrectionRecordT, EvidenceT, ModelCorrectionT, RootCauseT } from "../contracts";
+import { corrections } from "../store/repos";
+import { MAX_CORRECTION_EXAMPLES } from "./mubit-diagnoser";
 
 export interface SubmitCorrectionParams {
   investigationId: string;
   diagnosisId: string;
   modelCallId: string;
+  mubitRequestId?: string;
   predictedCause: RootCauseT;
   correctedCause: RootCauseT;
   correctedEvidenceIds: string[];
+  evidence: EvidenceT[];
   note?: string;
   verifiedByUserId?: string;
 }
 
-export class MubitFeedbackPipeline {
-  private corrections: ModelCorrectionT[] = [];
-  private adapterRecord: AdapterRecordT;
-
-  constructor() {
-    this.adapterRecord = {
-      schemaVersion: 1,
-      adapterRecordId: "adapt_rec_001",
-      taskKey: "normal_incident_diagnosis",
-      mubitTaskId: "task_normal_diag_v1",
-      mubitAdapterVersionId: "adapt_v1.0",
-      status: "collecting",
-      keptExamples: 0,
-      checkedAt: new Date().toISOString(),
-    };
+export class CorrectionError extends Error {
+  constructor(public readonly code: string, message: string) {
+    super(message);
+    this.name = "CorrectionError";
   }
+}
 
-  public async submitCorrection(
-    params: SubmitCorrectionParams
-  ): Promise<{ correction: ModelCorrectionT; adapter: AdapterRecordT }> {
-    const correctionId = `corr_${Date.now()}`;
-    const now = new Date().toISOString();
-    const mubitApiKey = process.env.MUBIT_API_KEY || "";
-
+// Mubit has no feedback or annotation API (see docs/mubit/concepts.md). A correction is therefore a local
+// record that changes later diagnoses by riding along as a labelled example in the next Mubit calls of the
+// same task. Adapter training and kept-example counts are only visible in the Mubit console.
+export class CorrectionMemory {
+  public async submitCorrection(params: SubmitCorrectionParams): Promise<CorrectionRecordT> {
+    const cited = new Set(params.correctedEvidenceIds);
+    const examples = params.evidence
+      .filter(item => cited.has(item.evidenceId))
+      .map(item => ({ observedFact: item.observedFact, measurements: item.measurements }));
+    if (examples.length === 0 || examples.length !== cited.size) {
+      throw new CorrectionError("CORRECTION_EVIDENCE_REQUIRED", "A correction must cite evidence from the diagnosed incident.");
+    }
     const correction: ModelCorrectionT = {
       schemaVersion: 1,
-      correctionId,
+      correctionId: `corr_${randomUUID()}`,
       investigationId: params.investigationId,
       diagnosisId: params.diagnosisId,
       modelCallId: params.modelCallId,
       predictedCause: params.predictedCause,
       correctedCause: params.correctedCause,
-      correctedEvidenceIds: params.correctedEvidenceIds,
-      note: params.note || "Operator verified root cause.",
+      correctedEvidenceIds: [...cited],
+      note: params.note?.trim() || undefined,
       verifiedByUserId: params.verifiedByUserId || "usr_operator_01",
-      verifiedAt: now,
-      ingestionStatus: "submitted",
+      verifiedAt: new Date().toISOString(),
+      ingestionStatus: "local_only",
     };
-
-    // Attempt to notify Mubit feedback endpoint or update local adapter record
-    try {
-      if (mubitApiKey) {
-        // Forward to Mubit feedback / annotations API
-        await fetch("https://api.mubit.ai/v1/feedback", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mubitApiKey}`,
-          },
-          body: JSON.stringify({
-            modelCallId: params.modelCallId,
-            predictedLabel: params.predictedCause,
-            correctedLabel: params.correctedCause,
-            taskKey: "normal_incident_diagnosis",
-            note: params.note,
-          }),
-        }).catch(() => {
-          // Non-blocking if feedback endpoint returns 404/500
-        });
-      }
-    } catch {
-      // Non-blocking
-    }
-
-    this.corrections.push(correction);
-
-    // Update adapter record metrics
-    this.adapterRecord.keptExamples = (this.adapterRecord.keptExamples || 0) + 1;
-    this.adapterRecord.checkedAt = now;
-    if (this.adapterRecord.keptExamples >= 3) {
-      this.adapterRecord.status = "training";
-      this.adapterRecord.mubitAdapterVersionId = "adapt_v1.1_tuned";
-    }
-
-    return {
+    const record: CorrectionRecordT = {
       correction,
-      adapter: this.adapterRecord,
+      ...(params.mubitRequestId ? { correctedMubitRequestId: params.mubitRequestId } : {}),
+      examples,
     };
+    return corrections.insert(correction.correctionId, record);
   }
 
-  public getAdapterRecord(): AdapterRecordT {
-    return this.adapterRecord;
+  /** Newest first. */
+  public async list(): Promise<CorrectionRecordT[]> {
+    return (await corrections.find()).sort((a, b) => b.correction.verifiedAt.localeCompare(a.correction.verifiedAt));
   }
 
-  public getCorrections(): ModelCorrectionT[] {
-    return this.corrections;
+  /** The newest correction per evidence pattern, capped, ready for the diagnosis user message. */
+  public async examplesForDiagnosis(): Promise<CorrectionRecordT[]> {
+    const seen = new Set<string>();
+    const picked: CorrectionRecordT[] = [];
+    for (const record of await this.list()) {
+      const pattern = record.examples.map(example => example.observedFact).sort().join("\n");
+      if (seen.has(pattern)) continue;
+      seen.add(pattern);
+      picked.push(record);
+      if (picked.length === MAX_CORRECTION_EXAMPLES) break;
+    }
+    return picked;
+  }
+
+  public async clear(): Promise<void> {
+    for (const record of await corrections.find()) await corrections.remove(record.correction.correctionId);
   }
 }
 
-export const feedbackPipeline = new MubitFeedbackPipeline();
+export const feedbackPipeline = new CorrectionMemory();

@@ -325,6 +325,7 @@ export const ModelCall = z.object({
   sessionId: Id,
   inputEvidenceIds: z.array(Id),
   mubitRequestId: z.string().optional(),
+  appliedCorrectionIds: z.array(Id).optional(),
   responseRecordId: Id.optional(),
   inputTokens: z.number().int().nonnegative().optional(),
   outputTokens: z.number().int().nonnegative().optional(),
@@ -346,6 +347,14 @@ export const ModelCorrection = z.object({
   verifiedByUserId: Id,
   verifiedAt: DateTime,
   ingestionStatus: z.enum(["local_only", "queued", "submitted", "confirmed", "unsupported"]),
+}).strict();
+
+// A verified merchant correction kept by Normal. Mubit has no feedback API, so it reaches Mubit only
+// as a labelled example inside later diagnosis calls of the same task. Evidence IDs are dropped on purpose.
+export const CorrectionRecord = z.object({
+  correction: ModelCorrection,
+  correctedMubitRequestId: z.string().optional(),
+  examples: z.array(z.object({ observedFact: z.string().min(1), measurements: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])) }).strict()).min(1),
 }).strict();
 
 export const AdapterRecord = z.object({
@@ -476,6 +485,7 @@ export type ActionOutcomeT = z.infer<typeof ActionOutcome>;
 export type ModelCallT = z.infer<typeof ModelCall>;
 export type ModelCorrectionT = z.infer<typeof ModelCorrection>;
 export type AdapterRecordT = z.infer<typeof AdapterRecord>;
+export type CorrectionRecordT = z.infer<typeof CorrectionRecord>;
 export type EvaluationCaseT = z.infer<typeof EvaluationCase>;
 export type EvaluationResultT = z.infer<typeof EvaluationResult>;
 export type SimulatorRunT = z.infer<typeof SimulatorRun>;

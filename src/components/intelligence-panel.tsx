@@ -8,14 +8,14 @@ import {
   RefreshCw,
   Send,
   Zap,
-  TrendingUp,
   Sliders,
   CheckCircle2,
   Clock,
-  DollarSign,
   ArrowRight,
+  GraduationCap,
 } from "lucide-react";
 
+import { RootCause } from "../contracts";
 import { SaplingPolicyGate } from "./sapling-policy-gate";
 
 interface IntelligencePanelProps {
@@ -37,13 +37,16 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
   const [correctionCause, setCorrectionCause] = useState("delivery_delays");
   const [correctionNote, setCorrectionNote] = useState("");
   const [feedbackResult, setFeedbackResult] = useState<any>(null);
-  const [benchmark, setBenchmark] = useState<any>(null);
+  const [feedbackError, setFeedbackError] = useState("");
+  const [learning, setLearning] = useState<any>(null);
+  // The diagnosis a merchant corrected, kept so the next Mubit call can be compared with it.
+  const [correctedRun, setCorrectedRun] = useState<{ cause: string; requestId?: string } | null>(null);
   const [planBlock, setPlanBlock] = useState<any>(null);
 
-  // Load initial simulation and benchmark on mount
+  // Load initial simulation and Mubit learning status on mount
   useEffect(() => {
     fetchSimulationState();
-    fetchBenchmark();
+    fetchLearning();
   }, []);
 
   const fetchSimulationState = async () => {
@@ -58,15 +61,12 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
     }
   };
 
-  const fetchBenchmark = async () => {
+  const fetchLearning = async () => {
     try {
-      const res = await fetch("/api/intelligence/benchmark");
-      if (res.ok) {
-        const data = await res.json();
-        setBenchmark(data);
-      }
+      const res = await fetch("/api/intelligence/feedback");
+      if (res.ok) setLearning(await res.json());
     } catch (e) {
-      console.error("Error fetching benchmark:", e);
+      console.error("Error fetching Mubit learning status:", e);
     }
   };
 
@@ -115,6 +115,8 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
       if (res.ok) {
         setDiagnosisData(data.diagnosis);
         setModelCall(data.modelCall);
+        setFeedbackResult(null);
+        fetchLearning();
         setPlanBlock(null);
         if (data.diagnosis?.output?.primaryCause) {
           setCorrectionCause(data.diagnosis.output.primaryCause);
@@ -156,7 +158,9 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
   const handleSubmitFeedback = async () => {
     if (!diagnosisData || !modelCall) return;
     setIsSubmittingFeedback(true);
+    setFeedbackError("");
     try {
+      const evidence = simData?.evidence || [];
       const res = await fetch("/api/intelligence/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -164,21 +168,34 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
           investigationId: diagnosisData.investigationId,
           diagnosisId: diagnosisData.diagnosisId,
           modelCallId: modelCall.modelCallId,
+          mubitRequestId: modelCall.mubitRequestId,
           predictedCause: diagnosisData.output.primaryCause,
           correctedCause: correctionCause,
-          correctedEvidenceIds: simData?.evidence?.map((e: any) => e.evidenceId) || [],
-          note: correctionNote || "Merchant operator feedback.",
+          correctedEvidenceIds: evidence.map((e: any) => e.evidenceId),
+          evidence,
+          ...(correctionNote.trim() ? { note: correctionNote.trim() } : {}),
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setFeedbackResult(data);
-        fetchBenchmark();
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "The correction could not be saved.");
+      setFeedbackResult(data);
+      setLearning(data);
+      setCorrectedRun({ cause: diagnosisData.output.primaryCause, requestId: modelCall.mubitRequestId });
     } catch (e) {
-      console.error("Feedback error:", e);
+      setFeedbackError(e instanceof Error ? e.message : "The correction could not be saved.");
     } finally {
       setIsSubmittingFeedback(false);
+    }
+  };
+
+  const handleResetCorrections = async () => {
+    try {
+      const res = await fetch("/api/intelligence/feedback", { method: "DELETE" });
+      if (res.ok) setLearning(await res.json());
+      setFeedbackResult(null);
+      setCorrectedRun(null);
+    } catch (e) {
+      console.error("Reset corrections error:", e);
     }
   };
 
@@ -360,10 +377,23 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3 text-slate-500" /> {modelCall.latencyMs}ms
                 </span>
-                <span className="text-blue-600">trace: {modelCall.mubitRequestId}</span>
+                <span className="text-blue-600" data-testid="mubit-request-id">Mubit request: {modelCall.mubitRequestId}</span>
               </div>
             )}
           </div>
+
+          {modelCall && (
+            <div data-testid="corrections-applied" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              {modelCall.appliedCorrectionIds?.length
+                ? <>This Mubit call included <b>{modelCall.appliedCorrectionIds.length}</b> merchant-verified correction{modelCall.appliedCorrectionIds.length === 1 ? " as a labelled example" : "s as labelled examples"} (same Mubit task, same system prompt).</>
+                : <>No merchant corrections were included in this Mubit call.</>}
+              {correctedRun && modelCall.mubitRequestId !== correctedRun.requestId && (
+                <span data-testid="correction-before-after" className="block mt-1 font-mono text-[11px]">
+                  Before correction: <b>{correctedRun.cause}</b> ({correctedRun.requestId}) <ArrowRight className="inline w-3 h-3" /> after: <b className={diagnosisData.output.primaryCause === correctedRun.cause ? "text-amber-700" : "text-emerald-700"}>{diagnosisData.output.primaryCause}</b> ({modelCall.mubitRequestId})
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
@@ -421,44 +451,55 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               </button>
             </div>
 
-            {/* Human Correction for Mubit Model Adaptation */}
+            {/* Merchant correction: becomes a labelled example in later Mubit calls of this task */}
             <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
               <h4 className="text-xs font-semibold text-amber-700 uppercase">
-                Submit Merchant Correction (Mubit Adapter Loop)
+                Correct the diagnosis (teaches the next Mubit call)
               </h4>
               <div className="grid grid-cols-2 gap-2">
                 <select
+                  data-testid="correction-cause"
                   value={correctionCause}
                   onChange={(e) => setCorrectionCause(e.target.value)}
                   className="bg-white border border-slate-200 rounded px-2 py-1.5 text-xs text-slate-800"
                 >
-                  <option value="delivery_delays">delivery_delays</option>
-                  <option value="ad_fatigue">ad_fatigue</option>
-                  <option value="promo_checkout_failure">promo_checkout_failure</option>
-                  <option value="product_quality">product_quality</option>
-                  <option value="negative_sentiment">negative_sentiment</option>
-                  <option value="stockout">stockout</option>
-                  <option value="viral_demand">viral_demand</option>
+                  {RootCause.options.map((cause) => (
+                    <option key={cause} value={cause}>{cause}</option>
+                  ))}
                 </select>
                 <input
                   type="text"
-                  placeholder="Optional policy note..."
+                  placeholder="Why? (optional note)"
                   value={correctionNote}
                   onChange={(e) => setCorrectionNote(e.target.value)}
                   className="bg-white border border-slate-200 rounded px-2 py-1.5 text-xs text-slate-800"
                 />
               </div>
               <button
+                data-testid="correction-submit"
                 onClick={handleSubmitFeedback}
                 disabled={isSubmittingFeedback}
                 className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-medium text-xs transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
-                {isSubmittingFeedback ? "Queueing Adapter Update..." : "Submit Correction to Mubit"}
+                {isSubmittingFeedback ? "Saving correction..." : "Save verified root cause"}
               </button>
+              {feedbackError && <p role="alert" className="text-[11px] text-red-700">{feedbackError}</p>}
               {feedbackResult && (
-                <div className="text-[11px] text-emerald-700 flex items-center gap-1 font-mono pt-1">
-                  <CheckCircle2 className="w-3 h-3" /> Correction {feedbackResult.correction?.correctionId} submitted. Adapter status: {feedbackResult.adapter?.status}
+                <div className="space-y-2 pt-1">
+                  <p className="text-[11px] text-emerald-700 flex items-start gap-1">
+                    <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
+                    <span>Saved as a local correction record. The next diagnosis sends it to Mubit as a labelled example.</span>
+                  </p>
+                  <button
+                    data-testid="correction-rerun"
+                    onClick={handleDiagnose}
+                    disabled={isDiagnosing}
+                    className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 disabled:opacity-50 font-medium text-xs transition-colors"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosing ? "animate-spin" : ""}`} />
+                    {isDiagnosing ? "Re-running via Mubit..." : "Re-run diagnosis with this correction"}
+                  </button>
                 </div>
               )}
             </div>
@@ -466,95 +507,52 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
         </div>
       )}
 
-      {/* Step 4: Benchmark Scoreboard (Held-out Evaluation) */}
-      {benchmark && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+      {/* Step 4: Mubit learning loop (only what Normal can actually observe) */}
+      {learning && (
+        <div data-testid="mubit-learning" className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-violet-600" />
-              <h3 className="text-sm font-semibold text-slate-900">
-                4. Held-Out Evaluation: Closed Model vs. Mubit Task Adapter
-              </h3>
+              <GraduationCap className="w-4 h-4 text-violet-600" />
+              <h3 className="text-sm font-semibold text-slate-900">4. Mubit Learning Loop</h3>
             </div>
-            <span className="text-xs text-slate-500 font-mono">
-              Test Cases: {benchmark.casesCount}
-            </span>
+            {learning.corrections?.length > 0 && (
+              <button onClick={handleResetCorrections} className="text-xs text-slate-500 hover:text-slate-800 underline">
+                Clear corrections
+              </button>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Accuracy */}
-            <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex justify-between items-center text-xs text-slate-500">
-                <span>Accuracy</span>
-                <span className="text-violet-600 font-semibold font-mono">
-                  +{benchmark.adapterAccuracy - benchmark.providerAccuracy}%
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between mt-2">
-                <div>
-                  <span className="text-xs text-slate-500">Baseline</span>
-                  <p className="text-lg font-bold text-slate-700 font-mono">
-                    {benchmark.providerAccuracy}%
-                  </p>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                <div>
-                  <span className="text-xs text-violet-600 font-medium">Adapted</span>
-                  <p className="text-lg font-bold text-emerald-700 font-mono">
-                    {benchmark.adapterAccuracy}%
-                  </p>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-500 uppercase font-semibold">Mubit task</span>
+              <p className="mt-1 text-slate-800">&ldquo;{learning.mubitTask.consoleName}&hellip;&rdquo;</p>
+              <p className="mt-1 font-mono text-[11px] text-slate-500">{learning.mubitTask.model} · {learning.mubitTask.fingerprint}</p>
+              <p className="mt-1 text-[11px] text-slate-500">Every diagnosis, corrected or not, uses this one system prompt, model and output format, so Mubit records them as one task.</p>
             </div>
-
-            {/* Latency */}
-            <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex justify-between items-center text-xs text-slate-500">
-                <span>Avg Latency</span>
-                <span className="text-emerald-700 font-semibold font-mono">
-                  -{Math.round(((benchmark.providerAvgLatencyMs - benchmark.adapterAvgLatencyMs) / benchmark.providerAvgLatencyMs) * 100)}%
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between mt-2">
-                <div>
-                  <span className="text-xs text-slate-500">Baseline</span>
-                  <p className="text-lg font-bold text-slate-700 font-mono">
-                    {benchmark.providerAvgLatencyMs}ms
-                  </p>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                <div>
-                  <span className="text-xs text-violet-600 font-medium">Adapted</span>
-                  <p className="text-lg font-bold text-emerald-700 font-mono">
-                    {benchmark.adapterAvgLatencyMs}ms
-                  </p>
-                </div>
-              </div>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-500 uppercase font-semibold">Merchant corrections</span>
+              <p className="mt-1 text-lg font-bold text-slate-900 font-mono" data-testid="corrections-count">{learning.corrections?.length || 0}</p>
+              <p className="text-[11px] text-slate-500">{learning.nextDiagnosisCorrectionIds?.length || 0} will be included in the next diagnosis call.</p>
+              {modelCall && <p className="text-[11px] text-slate-500">Last call ({modelCall.mubitRequestId}) included {modelCall.appliedCorrectionIds?.length || 0}.</p>}
             </div>
-
-            {/* Cost */}
-            <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex justify-between items-center text-xs text-slate-500">
-                <span>Inference Cost / Call</span>
-                <span className="text-emerald-700 font-semibold font-mono">-76%</span>
-              </div>
-              <div className="flex items-baseline justify-between mt-2">
-                <div>
-                  <span className="text-xs text-slate-500">Baseline</span>
-                  <p className="text-lg font-bold text-slate-700 font-mono">
-                    ${(benchmark.providerAvgCostMicros / 1000000).toFixed(4)}
-                  </p>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                <div>
-                  <span className="text-xs text-violet-600 font-medium">Adapted</span>
-                  <p className="text-lg font-bold text-emerald-700 font-mono">
-                    ${(benchmark.adapterAvgCostMicros / 1000000).toFixed(4)}
-                  </p>
-                </div>
-              </div>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-500 uppercase font-semibold">Adapter</span>
+              <p className="mt-1 text-slate-800">Mubit trains an adapter for this task from its kept examples ({learning.mubitTask.defaultKeptExamplesToTrain} by default).</p>
+              <p className="mt-1 text-[11px] text-slate-500">Kept-example count and adapter status are shown only in the {learning.mubitTask.adapterStatusSource}; Normal does not report them.</p>
             </div>
           </div>
+
+          {learning.corrections?.length > 0 && (
+            <ul className="space-y-1 text-[11px] font-mono text-slate-600">
+              {learning.corrections.slice(0, 5).map((record: any) => (
+                <li key={record.correction.correctionId}>
+                  {record.correction.predictedCause} <ArrowRight className="inline w-3 h-3" /> <b>{record.correction.correctedCause}</b>
+                  {record.correctedMubitRequestId && <> · corrected {record.correctedMubitRequestId}</>}
+                  {record.correction.note && <> · &ldquo;{record.correction.note}&rdquo;</>}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

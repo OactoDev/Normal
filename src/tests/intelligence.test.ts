@@ -1,13 +1,15 @@
 import { telemetrySimulator } from "../intelligence/telemetry-simulator";
 import { anomalyDetector } from "../intelligence/anomaly-detector";
 import { evidenceCollector } from "../intelligence/evidence-collector";
-import { mubitDiagnoser } from "../intelligence/mubit-diagnoser";
+import { DIAGNOSIS_INSTRUCTIONS, mubitDiagnoser } from "../intelligence/mubit-diagnoser";
 import { planGenerator } from "../intelligence/plan-generator";
 import { feedbackPipeline } from "../intelligence/feedback-pipeline";
 import { benchmarkEvaluator } from "../intelligence/benchmark-evaluator";
 import { orchestrator } from "../agents/orchestrator";
 
 async function runIntelligenceTests() {
+  // Corrections persist through the store: keep this run's records out of the local demo's data directory.
+  process.env.NORMAL_STORE ??= "memory";
   console.log("=== Testing Normal Intelligence & Diagnosis System ===");
 
   // 1. Telemetry Simulation
@@ -47,6 +49,14 @@ async function runIntelligenceTests() {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.MUBIT_API_KEY;
   let diagnosisResult;
+  const sentBodies: any[] = [];
+  const recordDiagnosisCalls = () => {
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      if (String(url).endsWith("/chat/completions")) sentBodies.push(JSON.parse(String(init?.body)));
+      return inner(url, init);
+    };
+  };
   try {
     if (!originalKey) {
       console.log(" - Mubit HTTP is mocked for this contract test; run with MUBIT_API_KEY for live AI.");
@@ -56,6 +66,7 @@ async function runIntelligenceTests() {
         return originalFetch(url, init);
       };
     }
+    recordDiagnosisCalls();
     diagnosisResult = await mubitDiagnoser.diagnose(packet.investigation, packet.evidence);
   } finally {
     globalThis.fetch = originalFetch;
@@ -83,24 +94,58 @@ async function runIntelligenceTests() {
   }
   console.log("✅ Recovery plan generation & orchestrator handoff verified.");
 
-  // 6. Feedback & Adapter Record
-  console.log("6. Submitting human correction to Mubit learning pipeline...");
-  const feedbackResult = await feedbackPipeline.submitCorrection({
-    investigationId: packet.investigation.investigationId,
-    diagnosisId: diagnosisResult.diagnosis.diagnosisId,
-    modelCallId: diagnosisResult.modelCall.modelCallId,
-    predictedCause: diagnosisResult.diagnosis.output.primaryCause,
-    correctedCause: "delivery_delays",
-    correctedEvidenceIds: packet.evidence.map((e) => e.evidenceId),
-    note: "Carrier SLA delivery delays breached 48h.",
-  });
-  console.log(` - Correction ID: ${feedbackResult.correction.correctionId}`);
-  console.log(` - Ingestion status: ${feedbackResult.correction.ingestionStatus}`);
-  console.log(` - Adapter record status: ${feedbackResult.adapter.status}`);
-  console.log("✅ Mubit feedback & adapter record verified.");
+  // 6. Merchant correction -> labelled example in the next Mubit call of the same task
+  console.log("6. Saving a merchant correction and sending it with the next diagnosis...");
+  const fetchBeforeCorrection = globalThis.fetch;
+  let correctionRecord;
+  try {
+    globalThis.fetch = async () => { throw new Error("Mubit has no feedback API: saving a correction must not call the network"); };
+    correctionRecord = await feedbackPipeline.submitCorrection({
+      investigationId: packet.investigation.investigationId,
+      diagnosisId: diagnosisResult.diagnosis.diagnosisId,
+      modelCallId: diagnosisResult.modelCall.modelCallId,
+      mubitRequestId: diagnosisResult.modelCall.mubitRequestId,
+      predictedCause: diagnosisResult.diagnosis.output.primaryCause,
+      correctedCause: "delivery_delays",
+      correctedEvidenceIds: packet.evidence.map((e) => e.evidenceId),
+      evidence: packet.evidence,
+      note: "Carrier SLA delivery delays breached 48h.",
+    });
+  } finally {
+    globalThis.fetch = fetchBeforeCorrection;
+  }
+  if (correctionRecord.correction.ingestionStatus !== "local_only") throw new Error("A correction is a local record until it is sent inside a diagnosis call");
+  if (correctionRecord.examples.some((example: any) => "evidenceId" in example)) throw new Error("Correction examples must not carry citable evidence IDs");
+  const examples = await feedbackPipeline.examplesForDiagnosis();
+  if (examples[0]?.correction.correctionId !== correctionRecord.correction.correctionId) throw new Error("Expected the new correction to be used by the next diagnosis");
+  let correctedResult;
+  try {
+    if (!originalKey) {
+      process.env.MUBIT_API_KEY = "test-placeholder";
+      globalThis.fetch = async (url, init) => {
+        if (String(url).endsWith("/chat/completions")) return Response.json({ model: "mock-diagnosis-model", choices: [{ message: { content: JSON.stringify({ primaryCause: "delivery_delays", supportedHypotheses: [{ cause: "delivery_delays", confidence: .95, rationale: "Matches the merchant-verified correction.", evidenceIds: packet.evidence.filter(item => item.evidenceId.includes("ship")).map(item => item.evidenceId) }], missingEvidence: [] }) }, finish_reason: "stop" }], usage: { prompt_tokens: 150, completion_tokens: 50 } }, { headers: { "x-middleware-request-id": "mreq_00000000000000000000000000000002" } });
+        return originalFetch(url, init);
+      };
+    }
+    recordDiagnosisCalls();
+    correctedResult = await mubitDiagnoser.diagnose(packet.investigation, packet.evidence, examples);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.MUBIT_API_KEY; else process.env.MUBIT_API_KEY = originalKey;
+  }
+  const [firstCall, correctedCall] = sentBodies;
+  if (firstCall.messages[0].content !== DIAGNOSIS_INSTRUCTIONS || correctedCall.messages[0].content !== DIAGNOSIS_INSTRUCTIONS) throw new Error("The system prompt must be identical so both calls stay in one Mubit task");
+  if (firstCall.model !== correctedCall.model || JSON.stringify(firstCall.response_format) !== JSON.stringify(correctedCall.response_format)) throw new Error("Model and output format must match across the task");
+  const sentCorrections = JSON.parse(correctedCall.messages[1].content).merchantVerifiedCorrections;
+  if (sentCorrections.length !== 1 || sentCorrections[0].merchantVerifiedCause !== "delivery_delays") throw new Error("Expected the correction in the next Mubit user message");
+  if (!correctedResult.modelCall.appliedCorrectionIds?.includes(correctionRecord.correction.correctionId)) throw new Error("Expected the model call to record which corrections it applied");
+  if (correctedResult.modelCall.instructionsFingerprint !== diagnosisResult.modelCall.instructionsFingerprint) throw new Error("Expected one task fingerprint");
+  console.log(` - Correction ID: ${correctionRecord.correction.correctionId} (local record)`);
+  console.log(` - Next Mubit call ${correctedResult.modelCall.mubitRequestId} applied ${correctedResult.modelCall.appliedCorrectionIds.length} correction(s), task ${correctedResult.modelCall.instructionsFingerprint}`);
+  console.log("✅ Correction reaches Mubit inside the same diagnosis task.");
 
   // 7. Benchmark Evaluator
-  console.log("7. Running benchmark on held-out test suite...");
+  console.log("7. Running the synthetic benchmark fixture (simulated numbers, not a Mubit measurement)...");
   const benchmark = benchmarkEvaluator.runBenchmark();
   console.log(` - Evaluated cases: ${benchmark.casesCount}`);
   console.log(` - Baseline provider accuracy: ${benchmark.providerAccuracy}%`);

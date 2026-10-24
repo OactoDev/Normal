@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { ModelCall } from "../contracts";
-import { MubitDiagnosisError, mubitDiagnoser } from "../intelligence/mubit-diagnoser";
+import { DIAGNOSIS_INSTRUCTIONS, MubitDiagnosisError, mubitDiagnoser } from "../intelligence/mubit-diagnoser";
 import { POST } from "../app/api/intelligence/diagnose/route";
+import * as feedbackRoute from "../app/api/intelligence/feedback/route";
 
 async function run() {
+  process.env.NORMAL_STORE ??= "memory";
   const saved = { key: process.env.MUBIT_API_KEY, base: process.env.MUBIT_BASE_URL, model: process.env.MUBIT_MODEL, fetch: globalThis.fetch };
   const now = new Date().toISOString();
   const investigation = { schemaVersion: 1 as const, investigationId: "inv_test", businessId: "nova_store", anomalyIds: [], evidenceIds: ["e_shipping"], status: "active" as const, createdAt: now, updatedAt: now };
@@ -12,12 +14,14 @@ async function run() {
   const output = { primaryCause: "delivery_delays", supportedHypotheses: [{ cause: "delivery_delays", confidence: .87, rationale: "An explanation returned by the provider.", evidenceIds: ["e_shipping"] }], missingEvidence: [] };
   const requestId = "mreq_0123456789abcdef0123456789abcdef";
   let providerCalls = 0;
+  let lastBody: any;
   const provider = (content = JSON.stringify(output), options: { trace?: boolean; finish?: string } = {}) => Response.json({ model: "returned-model", choices: [{ message: { content }, finish_reason: options.finish || "stop" }], usage: { prompt_tokens: 31, completion_tokens: 59 } }, { headers: options.trace === false ? {} : { "x-middleware-request-id": requestId } });
   const mock = (response: () => Response) => {
     globalThis.fetch = async (url, init) => {
       if (String(url).startsWith("https://mubit.test/")) {
         providerCalls++;
         const body = JSON.parse(String(init.body));
+        lastBody = body;
         assert.equal(body.model, "configured-model");
         assert.equal(body.temperature, undefined, "reasoning models reject temperature 0.1");
         assert.equal(body.max_completion_tokens, 2048);
@@ -43,6 +47,33 @@ async function run() {
     assert.equal(result.modelCall.providerModel, "returned-model");
     assert.equal(result.modelCall.inputTokens, 31); assert.equal(result.modelCall.outputTokens, 59);
     ModelCall.parse(result.modelCall);
+    assert.equal(lastBody.messages[0].content, DIAGNOSIS_INSTRUCTIONS);
+    assert.deepEqual(JSON.parse(lastBody.messages[1].content).merchantVerifiedCorrections, []);
+    assert.deepEqual(result.modelCall.appliedCorrectionIds, []);
+
+    // A correction is saved locally (no Mubit feedback endpoint exists) and rides along in the next call of the same task.
+    const correctionUrl = "https://normal.test/api/intelligence/feedback";
+    const correctionBody = { investigationId: "inv_test", diagnosisId: result.diagnosis.diagnosisId, modelCallId: result.modelCall.modelCallId, mubitRequestId: requestId, predictedCause: "delivery_delays", correctedCause: "negative_sentiment", correctedEvidenceIds: ["e_shipping"], evidence, note: "Reviews drove this one." };
+    const callsBeforeCorrection = providerCalls;
+    const badCorrection = await feedbackRoute.POST(new NextRequest(correctionUrl, { method: "POST", body: JSON.stringify({ ...correctionBody, correctedEvidenceIds: ["not-in-packet"] }) }));
+    assert.equal(badCorrection.status, 400);
+    assert.equal((await badCorrection.json()).error.code, "CORRECTION_EVIDENCE_REQUIRED");
+    const saved = await feedbackRoute.POST(new NextRequest(correctionUrl, { method: "POST", body: JSON.stringify(correctionBody) }));
+    assert.equal(saved.status, 200);
+    const savedBody = await saved.json();
+    assert.equal(savedBody.record.correction.ingestionStatus, "local_only");
+    assert.equal(savedBody.record.correctedMubitRequestId, requestId);
+    assert.equal(savedBody.mubitTask.fingerprint, result.modelCall.instructionsFingerprint);
+    assert.deepEqual(savedBody.nextDiagnosisCorrectionIds, [savedBody.record.correction.correctionId]);
+    assert.equal(providerCalls, callsBeforeCorrection, "saving a correction never calls Mubit");
+    const corrected = await POST(new NextRequest("https://normal.test/api/intelligence/diagnose", { method: "POST", body: JSON.stringify({ investigation, evidence }) }));
+    assert.equal(corrected.status, 200);
+    assert.deepEqual((await corrected.json()).modelCall.appliedCorrectionIds, [savedBody.record.correction.correctionId]);
+    assert.equal(lastBody.messages[0].content, DIAGNOSIS_INSTRUCTIONS, "same system prompt keeps corrected calls in one Mubit task");
+    const sent = JSON.parse(lastBody.messages[1].content).merchantVerifiedCorrections;
+    assert.deepEqual(sent, [{ observedEvidence: [{ observedFact: evidence[0].observedFact, measurements: evidence[0].measurements }], modelDiagnosed: "delivery_delays", merchantVerifiedCause: "negative_sentiment", merchantNote: "Reviews drove this one." }]);
+    const cleared = await (await feedbackRoute.DELETE()).json();
+    assert.deepEqual(cleared.corrections, []);
     for (const [content, options] of [
       ["not JSON", {}],
       [JSON.stringify({ ...output, primaryCause: "invented-cause" }), {}],
