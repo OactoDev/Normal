@@ -184,6 +184,21 @@ export const DiagnosisModelOutput = z.object({
   missingEvidence: z.array(z.string()).default([]),
 }).strict();
 
+// Banyan Sapling verdict on a diagnosis: policy + cited evidence + claim.
+export const SaplingLabel = z.enum(["supported", "violation", "insufficient_information", "inconsistent_context"]);
+export const SaplingCheck = z.object({
+  verdict: z.union([SaplingLabel, z.literal("unsure")]),
+  blocked: z.boolean(),
+  status: z.string(),
+  rawLabel: z.string(),
+  probabilities: z.record(z.string(), z.number()),
+  policy: z.string().min(1),
+  claim: z.string().min(1),
+  evidenceIds: z.array(Id),
+  latencyMs: z.number().nonnegative(),
+  error: z.string().optional(),
+}).strict();
+
 export const Diagnosis = z.object({
   ...SchemaMeta,
   diagnosisId: Id,
@@ -192,7 +207,8 @@ export const Diagnosis = z.object({
   output: DiagnosisModelOutput,
   serverAttribution: z.object({
     verifiedByRules: z.boolean().default(false),
-    saplingVerification: z.enum(["supported", "violation", "insufficient_information", "unsure"]).optional(),
+    saplingVerification: z.union([SaplingLabel, z.literal("unsure")]).optional(),
+    saplingCheck: SaplingCheck.optional(),
   }).strict(),
   createdAt: DateTime,
 }).strict();
@@ -449,6 +465,8 @@ export type InvestigationT = z.infer<typeof Investigation>;
 export type EvidenceT = z.infer<typeof Evidence>;
 export type DiagnosisT = z.infer<typeof Diagnosis>;
 export type DiagnosisModelOutputT = z.infer<typeof DiagnosisModelOutput>;
+export type SaplingLabelT = z.infer<typeof SaplingLabel>;
+export type SaplingCheckT = z.infer<typeof SaplingCheck>;
 export type ActionProposalT = z.infer<typeof ActionProposal>;
 export type ProposedPlanT = z.infer<typeof ProposedPlan>;
 export type PlanApprovalT = z.infer<typeof PlanApproval>;

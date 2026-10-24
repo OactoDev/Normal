@@ -20,3 +20,4 @@ Both edit this file. Check off when done; add owner initials.
 ## Side quests (from Discord — confirm details)
 
 - [ ] Model card quest: `/upload your@email.com` + share in `#modelcards` — [details](../sources/discord/inbox/2026-10-23-0821-everyone-side-quest-1-model-card.md) (Switch 2 / $100 / $25 credits)
+- [ ] **Policy Challenge (Banyan Sapling) — due Sat 24 Oct 14:00 BST:** X + LinkedIn posts → `#side-quests` with team name, one-line task, both links, repo — [details](../sources/discord/inbox/2026-10-24-0216-everyone-side-quest-policy-challenge.md) (Switch 2)

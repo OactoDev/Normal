@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { planGenerator } from "../../../../intelligence/plan-generator";
 import { DiagnosisT, EvidenceT } from "../../../../contracts";
+import { SaplingBlockedError } from "../../../../intelligence/sapling-verifier";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,6 +23,12 @@ export async function POST(request: NextRequest) {
       handoff,
     });
   } catch (err: any) {
+    if (err instanceof SaplingBlockedError) {
+      return NextResponse.json(
+        { error: { code: "SAPLING_BLOCKED", message: err.message }, saplingCheck: err.check },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: { code: "PLAN_GENERATION_FAILED", message: err.message || "Failed to generate recovery plan" } },
       { status: 500 }

@@ -35,6 +35,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
   const [correctionNote, setCorrectionNote] = useState("");
   const [feedbackResult, setFeedbackResult] = useState<any>(null);
   const [benchmark, setBenchmark] = useState<any>(null);
+  const [planBlock, setPlanBlock] = useState<any>(null);
 
   // Load initial simulation and benchmark on mount
   useEffect(() => {
@@ -102,6 +103,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
         const data = await res.json();
         setDiagnosisData(data.diagnosis);
         setModelCall(data.modelCall);
+        setPlanBlock(null);
         if (data.diagnosis?.output?.primaryCause) {
           setCorrectionCause(data.diagnosis.output.primaryCause);
         }
@@ -128,6 +130,9 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
       if (res.ok) {
         const data = await res.json();
         onPlanGenerated(data.planId);
+      } else if (res.status === 409) {
+        const data = await res.json();
+        setPlanBlock(data.saplingCheck);
       }
     } catch (e) {
       console.error("Plan generation error:", e);
@@ -164,6 +169,8 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
       setIsSubmittingFeedback(false);
     }
   };
+
+  const saplingCheck = planBlock || diagnosisData?.serverAttribution?.saplingCheck;
 
   return (
     <div className="space-y-6">
@@ -354,12 +361,37 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               </p>
             </div>
             <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
-              <span className="text-xs text-slate-500 uppercase font-semibold">Server Attribution</span>
-              <p className="text-base font-medium text-emerald-400 mt-0.5">
-                {diagnosisData.serverAttribution?.saplingVerification || "verified"}
-              </p>
+              <span className="text-xs text-slate-500 uppercase font-semibold">Banyan Sapling</span>
+              {saplingCheck && saplingCheck.status !== "unavailable" ? (
+                <>
+                  <p className={`text-base font-bold mt-0.5 ${saplingCheck.blocked ? "text-rose-400" : "text-emerald-400"}`}>
+                    {saplingCheck.verdict}
+                    {saplingCheck.probabilities?.[saplingCheck.rawLabel] !== undefined &&
+                      ` · ${Math.round(saplingCheck.probabilities[saplingCheck.rawLabel] * 100)}%`}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    calibrated: {saplingCheck.status} · {saplingCheck.latencyMs}ms
+                  </p>
+                </>
+              ) : (
+                <p className="text-base font-medium text-amber-400 mt-0.5">not verified</p>
+              )}
             </div>
           </div>
+
+          {saplingCheck && (
+            <div className={`p-3 rounded-lg border text-xs space-y-1 ${saplingCheck.blocked ? "bg-rose-950/40 border-rose-800" : "bg-slate-950 border-slate-800"}`}>
+              {saplingCheck.blocked && (
+                <p className="font-semibold text-rose-300 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Plan blocked: Sapling found the diagnosis is not backed by the evidence.
+                </p>
+              )}
+              <p className="text-slate-400"><span className="text-slate-500">Policy:</span> {saplingCheck.policy}</p>
+              <p className="text-slate-400"><span className="text-slate-500">Claim:</span> {saplingCheck.claim}</p>
+              <p className="text-slate-500 font-mono">evidence: {saplingCheck.evidenceIds.join(", ")}</p>
+              {saplingCheck.error && <p className="text-amber-400">Sapling unavailable: {saplingCheck.error}</p>}
+            </div>
+          )}
 
           {/* Action Row: Generate Plan or Correct */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
@@ -373,10 +405,10 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               </p>
               <button
                 onClick={handleGeneratePlan}
-                disabled={isGeneratingPlan}
+                disabled={isGeneratingPlan || saplingCheck?.blocked}
                 className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-medium text-xs transition-colors"
               >
-                {isGeneratingPlan ? "Generating Plan..." : "Synthesize Plan & Open Operations"}
+                {saplingCheck?.blocked ? "Blocked by Banyan Sapling" : isGeneratingPlan ? "Generating Plan..." : "Synthesize Plan & Open Operations"}
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

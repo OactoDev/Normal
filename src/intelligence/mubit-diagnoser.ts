@@ -6,6 +6,7 @@ import {
   ModelCallT,
   RootCauseT,
 } from "../contracts";
+import { saplingVerifier } from "./sapling-verifier";
 
 export interface DiagnosisExecutionResult {
   diagnosis: DiagnosisT;
@@ -122,6 +123,9 @@ ${evidenceSummary}`;
 
     const latencyMs = Date.now() - startTime;
 
+    // Banyan Sapling checks the diagnosis against the diagnosis policy and the evidence it cites.
+    const saplingCheck = await saplingVerifier.verifyDiagnosis(parsedOutput, evidence);
+
     const modelCall: ModelCallT = {
       schemaVersion: 1,
       modelCallId,
@@ -149,7 +153,8 @@ ${evidenceSummary}`;
       output: parsedOutput,
       serverAttribution: {
         verifiedByRules: true,
-        saplingVerification: "supported",
+        ...(saplingCheck.status === "unavailable" ? {} : { saplingVerification: saplingCheck.verdict }),
+        saplingCheck,
       },
       createdAt: now,
     };

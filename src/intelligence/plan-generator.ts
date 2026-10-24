@@ -6,12 +6,17 @@ import {
   ActionProposalT,
 } from "../contracts";
 import { orchestrator } from "../agents/orchestrator";
+import { SaplingBlockedError, saplingVerifier } from "./sapling-verifier";
 
 export class PlanGenerator {
   public async generatePlan(
     diagnosis: DiagnosisT,
     evidence: EvidenceT[]
   ): Promise<PlanHandoffT> {
+    // Re-verify server-side: the diagnosis arrives from the client, so its saplingCheck can't be trusted.
+    const saplingCheck = await saplingVerifier.verifyDiagnosis(diagnosis.output, evidence);
+    if (saplingCheck.blocked) throw new SaplingBlockedError(saplingCheck);
+
     const planId = `plan_${Date.now()}`;
     const now = new Date().toISOString();
     const primaryCause = diagnosis.output.primaryCause;
