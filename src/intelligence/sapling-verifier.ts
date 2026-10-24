@@ -1,4 +1,4 @@
-import { DiagnosisModelOutputT, EvidenceT, RootCauseT, SaplingCheckT, SaplingLabelT } from "../contracts";
+import { DiagnosisModelOutputT, EvidenceT, RootCauseT, SaplingCheckT, SaplingLabel, SaplingLabelT } from "../contracts";
 
 // Banyan Sapling (MubitLabs) — verifies a claim against a policy and evidence. No auth.
 const SAPLING_URL = process.env.SAPLING_URL || "https://6adbee0669a00298cd4774c9.endpoints.huggingface.cloud";
@@ -46,15 +46,52 @@ export function renderEvidence(evidence: EvidenceT[]): string {
 }
 
 // Pure decision rule, kept separate from the HTTP call so it can be tested offline.
-export function decide(status: string, rawLabel: string): { verdict: SaplingLabelT; blocked: boolean } {
-  const verdict = (status !== "unsure" ? status : rawLabel) as SaplingLabelT;
-  return { verdict, blocked: BLOCKING.includes(verdict) };
+export function decide(status: string, rawLabel: string): { verdict: SaplingCheckT["verdict"]; blocked: boolean } {
+  const parsed = SaplingLabel.safeParse(status !== "unsure" ? status : rawLabel);
+  if (!parsed.success) return { verdict: "unsure", blocked: true };
+  return { verdict: parsed.data, blocked: BLOCKING.includes(parsed.data) };
 }
 
 export class SaplingBlockedError extends Error {
   constructor(public readonly check: SaplingCheckT) {
     super(`Banyan Sapling blocked this plan: diagnosis verdict is ${check.verdict}.`);
     this.name = "SaplingBlockedError";
+  }
+}
+
+// A single live call path shared by diagnosis verification and the stress-test route.
+// Evidence is already rendered so callers can use the exact text sent to Sapling.
+export async function callSapling(
+  policy: string,
+  evidence: string,
+  claim: string,
+): Promise<Omit<SaplingCheckT, "evidenceIds">> {
+  const started = Date.now();
+  try {
+    const response = await fetch(SAPLING_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inputs: { policy, evidence, claim } }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!response.ok) throw new Error(`Sapling HTTP ${response.status}`);
+    const data = await response.json();
+    const status = String(data.status);
+    const rawLabel = String(data.raw_label);
+    if ((status !== "unsure" && !SaplingLabel.safeParse(status).success) || !SaplingLabel.safeParse(rawLabel).success) {
+      throw new Error("Sapling returned an unrecognised verdict label");
+    }
+    const probabilities: Record<string, number> = data.probabilities;
+    if (!probabilities || SaplingLabel.options.some((label) =>
+      typeof probabilities[label] !== "number" || !Number.isFinite(probabilities[label]) || probabilities[label] < 0 || probabilities[label] > 1
+    ) || Math.abs(SaplingLabel.options.reduce((sum, label) => sum + probabilities[label], 0) - 1) > 0.02) {
+      throw new Error("Sapling returned an invalid probability distribution");
+    }
+    const { verdict, blocked } = decide(status, rawLabel);
+    return { policy, claim, verdict, blocked, status, rawLabel, probabilities, latencyMs: Date.now() - started };
+  } catch (err: any) {
+    // A plan needs a verified diagnosis: provider failure or malformed output cannot grant a pass.
+    return { policy, claim, verdict: "unsure", blocked: true, status: "unavailable", rawLabel: "", probabilities: {}, latencyMs: Date.now() - started, error: String(err?.message || err) };
   }
 }
 
@@ -73,23 +110,7 @@ export class SaplingVerifier {
       return { ...base, verdict: "insufficient_information", blocked: true, status: "not_called", rawLabel: "insufficient_information", probabilities: {}, latencyMs: 0 };
     }
 
-    const started = Date.now();
-    try {
-      const response = await fetch(SAPLING_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inputs: { policy, evidence: renderEvidence(evidenceUsed), claim } }),
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!response.ok) throw new Error(`Sapling HTTP ${response.status}`);
-      const data = await response.json();
-      const probabilities: Record<string, number> = data.probabilities || {};
-      const { verdict, blocked } = decide(String(data.status), String(data.raw_label));
-      return { ...base, verdict, blocked, status: String(data.status), rawLabel: String(data.raw_label), probabilities, latencyMs: Date.now() - started };
-    } catch (err: any) {
-      // Sapling unreachable: never claim a verification that didn't happen. The plan still needs human approval.
-      return { ...base, verdict: "unsure", blocked: false, status: "unavailable", rawLabel: "", probabilities: {}, latencyMs: Date.now() - started, error: String(err?.message || err) };
-    }
+    return { ...await callSapling(policy, renderEvidence(evidenceUsed), claim), evidenceIds: base.evidenceIds };
   }
 }
 

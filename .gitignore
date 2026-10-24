@@ -25,3 +25,15 @@ cloudflare/.wrangler/
 # CSV data store
 data/
 *.tsbuildinfo
+
+# Local demo renders, source face footage, and generated speech stay on this machine.
+demo-recording/pipeline/.work/
+demo-recording/pipeline/__pycache__/
+demo-recording/sapling/audio/
+demo-recording/sapling/face/
+demo-recording/sapling/face-work/
+demo-recording/sapling/*.mp4
+demo-recording/sapling/*.webm
+demo-recording/sapling/*.work/
+demo-recording/sapling/contact*.jpg
+demo-recording/sapling/verification/

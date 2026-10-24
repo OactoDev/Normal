@@ -16,6 +16,8 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+import { SaplingPolicyGate } from "./sapling-policy-gate";
+
 interface IntelligencePanelProps {
   onPlanGenerated: (planId: string) => void;
 }
@@ -67,19 +69,22 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
     }
   };
 
-  const handleSimulate = async () => {
+  const handleSimulate = async (nextSeverity = severity, nextScenario = scenario) => {
+    setSeverity(nextSeverity);
+    setScenario(nextScenario);
     setIsSimulating(true);
     try {
       const res = await fetch("/api/intelligence/scenarios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario, severity }),
+        body: JSON.stringify({ scenario: nextScenario, severity: nextSeverity }),
       });
       if (res.ok) {
         const data = await res.json();
         setSimData(data);
         setDiagnosisData(null);
         setModelCall(null);
+        setPlanBlock(null);
       }
     } catch (e) {
       console.error("Simulation error:", e);
@@ -246,8 +251,13 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-2" aria-label="Delivery policy scenarios">
+              <button type="button" data-testid="sapling-scenario-supported" onClick={() => handleSimulate(0.85, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-emerald-500/15 disabled:opacity-50">14 late orders · test pass</button>
+              <button type="button" data-testid="sapling-scenario-blocked" onClick={() => handleSimulate(0.15, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs font-medium text-rose-300 hover:bg-rose-500/15 disabled:opacity-50">8 late orders · test block</button>
+            </div>
+
             <button
-              onClick={handleSimulate}
+              onClick={() => handleSimulate()}
               disabled={isSimulating}
               className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-medium text-sm transition-colors"
             >
@@ -366,8 +376,8 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
                 <>
                   <p className={`text-base font-bold mt-0.5 ${saplingCheck.blocked ? "text-rose-400" : "text-emerald-400"}`}>
                     {saplingCheck.verdict}
-                    {saplingCheck.probabilities?.[saplingCheck.rawLabel] !== undefined &&
-                      ` · ${Math.round(saplingCheck.probabilities[saplingCheck.rawLabel] * 100)}%`}
+                    {saplingCheck.probabilities?.[saplingCheck.verdict] !== undefined &&
+                      ` · ${Math.round(saplingCheck.probabilities[saplingCheck.verdict] * 100)}%`}
                   </p>
                   <p className="text-[11px] text-slate-500 font-mono">
                     calibrated: {saplingCheck.status} · {saplingCheck.latencyMs}ms
@@ -379,19 +389,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
             </div>
           </div>
 
-          {saplingCheck && (
-            <div className={`p-3 rounded-lg border text-xs space-y-1 ${saplingCheck.blocked ? "bg-rose-950/40 border-rose-800" : "bg-slate-950 border-slate-800"}`}>
-              {saplingCheck.blocked && (
-                <p className="font-semibold text-rose-300 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5" /> Plan blocked: Sapling found the diagnosis is not backed by the evidence.
-                </p>
-              )}
-              <p className="text-slate-400"><span className="text-slate-500">Policy:</span> {saplingCheck.policy}</p>
-              <p className="text-slate-400"><span className="text-slate-500">Claim:</span> {saplingCheck.claim}</p>
-              <p className="text-slate-500 font-mono">evidence: {saplingCheck.evidenceIds.join(", ")}</p>
-              {saplingCheck.error && <p className="text-amber-400">Sapling unavailable: {saplingCheck.error}</p>}
-            </div>
-          )}
+          {saplingCheck && <SaplingPolicyGate check={saplingCheck} evidence={simData?.evidence || []} />}
 
           {/* Action Row: Generate Plan or Correct */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
@@ -404,6 +402,8 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
                 Synthesize actionable recovery operations based on this diagnosis and dispatch to Aman&apos;s execution cockpit.
               </p>
               <button
+                data-testid="sapling-plan-button"
+                title={saplingCheck?.blocked ? "Banyan Sapling blocked this diagnosis. No plan can be generated." : "Build a plan for merchant approval"}
                 onClick={handleGeneratePlan}
                 disabled={isGeneratingPlan || saplingCheck?.blocked}
                 className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-medium text-xs transition-colors"
