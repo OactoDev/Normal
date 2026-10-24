@@ -12,10 +12,12 @@
     "test:intelligence": "tsx src/tests/intelligence.test.ts",
     "test:mubit": "tsx src/tests/mubit-email-generation.test.ts",
     "test:sapling": "tsx src/tests/sapling.test.ts",
-    "build:worker": "opennextjs-cloudflare build",
-    "deploy:worker": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "build:worker": "opennextjs-cloudflare build && node scripts/prepare-worker-assets.mjs",
+    "deploy:worker": "npm run build:worker && opennextjs-cloudflare deploy",
     "preview:worker": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "test:d1": "tsx src/tests/d1.test.ts"
+    "test:d1": "tsx src/tests/d1.test.ts",
+    "test:mubit-diagnosis": "tsx src/tests/mubit-diagnosis.test.ts",
+    "test:documents": "tsx src/tests/static-documents.test.ts"
   },
   "dependencies": {
     "@xyflow/react": "12.12.0",

@@ -44,7 +44,24 @@ async function runIntelligenceTests() {
 
   // 4. Mubit AI Diagnosis
   console.log("4. Running AI Diagnosis via Mubit proxy...");
-  const diagnosisResult = await mubitDiagnoser.diagnose(packet.investigation, packet.evidence);
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.MUBIT_API_KEY;
+  let diagnosisResult;
+  try {
+    if (!originalKey) {
+      console.log(" - Mubit HTTP is mocked for this contract test; run with MUBIT_API_KEY for live AI.");
+      process.env.MUBIT_API_KEY = "test-placeholder";
+      globalThis.fetch = async (url, init) => {
+        if (String(url).endsWith("/chat/completions")) return Response.json({ model: "mock-diagnosis-model", choices: [{ message: { content: JSON.stringify({ primaryCause: "delivery_delays", supportedHypotheses: [{ cause: "delivery_delays", confidence: .9, rationale: "Synthetic provider response for the diagnosis contract test.", evidenceIds: packet.evidence.filter(item => item.evidenceId.includes("ship")).map(item => item.evidenceId) }], missingEvidence: [] }) }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 50 } }, { headers: { "x-middleware-request-id": "mreq_00000000000000000000000000000001" } });
+        return originalFetch(url, init);
+      };
+    }
+    diagnosisResult = await mubitDiagnoser.diagnose(packet.investigation, packet.evidence);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.MUBIT_API_KEY; else process.env.MUBIT_API_KEY = originalKey;
+  }
+  if (!/^mreq_[a-f0-9]{32}$/i.test(diagnosisResult.modelCall.mubitRequestId || "")) throw new Error("Expected a Mubit request ID from the provider response");
   console.log(` - Model used: ${diagnosisResult.modelCall.providerModel}`);
   console.log(` - Primary root cause: ${diagnosisResult.diagnosis.output.primaryCause}`);
   console.log(` - Mubit trace ID: ${diagnosisResult.modelCall.mubitRequestId}`);
@@ -52,7 +69,7 @@ async function runIntelligenceTests() {
   if (!diagnosisResult.diagnosis.output.primaryCause) {
     throw new Error("Expected a primary root cause");
   }
-  console.log("✅ Mubit AI Diagnosis verified.");
+  console.log("✅ Diagnosis contract and provider attribution verified.");
 
   // 5. Recovery Plan Generation
   console.log("5. Generating Recovery Plan...");

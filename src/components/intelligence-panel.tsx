@@ -33,6 +33,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
   const [simData, setSimData] = useState<any>(null);
   const [diagnosisData, setDiagnosisData] = useState<any>(null);
   const [modelCall, setModelCall] = useState<any>(null);
+  const [diagnosisError, setDiagnosisError] = useState("");
   const [correctionCause, setCorrectionCause] = useState("delivery_delays");
   const [correctionNote, setCorrectionNote] = useState("");
   const [feedbackResult, setFeedbackResult] = useState<any>(null);
@@ -73,6 +74,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
     setSeverity(nextSeverity);
     setScenario(nextScenario);
     setIsSimulating(true);
+    setDiagnosisError("");
     try {
       const res = await fetch("/api/intelligence/scenarios", {
         method: "POST",
@@ -95,6 +97,10 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
 
   const handleDiagnose = async () => {
     setIsDiagnosing(true);
+    setDiagnosisError("");
+    setDiagnosisData(null);
+    setModelCall(null);
+    setPlanBlock(null);
     try {
       const res = await fetch("/api/intelligence/diagnose", {
         method: "POST",
@@ -104,8 +110,9 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
           evidence: simData?.evidence,
         }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "The AI diagnosis could not be completed. Please retry.");
       if (res.ok) {
-        const data = await res.json();
         setDiagnosisData(data.diagnosis);
         setModelCall(data.modelCall);
         setPlanBlock(null);
@@ -114,7 +121,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
         }
       }
     } catch (e) {
-      console.error("Diagnosis error:", e);
+      setDiagnosisError(e instanceof Error ? e.message : "The AI diagnosis could not be completed. Please retry.");
     } finally {
       setIsDiagnosing(false);
     }
@@ -252,13 +259,13 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-2" aria-label="Delivery policy scenarios">
-              <button type="button" data-testid="sapling-scenario-supported" onClick={() => handleSimulate(0.85, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50">14 late orders</button>
-              <button type="button" data-testid="sapling-scenario-blocked" onClick={() => handleSimulate(0.15, "delivery_delays")} disabled={isSimulating} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50">8 late orders</button>
+              <button type="button" data-testid="sapling-scenario-supported" onClick={() => handleSimulate(0.85, "delivery_delays")} disabled={isSimulating || isDiagnosing} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50">14 late orders</button>
+              <button type="button" data-testid="sapling-scenario-blocked" onClick={() => handleSimulate(0.15, "delivery_delays")} disabled={isSimulating || isDiagnosing} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50">8 late orders</button>
             </div>
 
             <button
               onClick={() => handleSimulate()}
-              disabled={isSimulating}
+              disabled={isSimulating || isDiagnosing}
               className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-600 disabled:opacity-50 text-white font-medium text-sm transition-colors"
             >
               <Activity className={`w-4 h-4 ${isSimulating ? "animate-spin" : ""}`} />
@@ -336,6 +343,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
             <Cpu className={`w-4 h-4 ${isDiagnosing ? "animate-spin" : ""}`} />
             {isDiagnosing ? "Running AI Diagnosis via Mubit..." : "Run Mubit AI Diagnosis"}
           </button>
+          {diagnosisError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{diagnosisError}</p>}
         </div>
       </div>
 
