@@ -179,9 +179,14 @@ export const DiagnosisModelOutput = z.object({
       confidence: Rate,
       rationale: z.string().min(1),
       evidenceIds: z.array(Id),
+      // Set only on diagnoses imported from @normal/contracts, which grade hypotheses instead of scoring them.
+      strength: z.enum(["weak", "moderate", "strong"]).optional(),
+      counterEvidenceIds: z.array(Id).optional(),
     })
   ),
   missingEvidence: z.array(z.string()).default([]),
+  summary: z.string().min(1).optional(),
+  requiresReview: z.boolean().optional(),
 }).strict();
 
 // Banyan Sapling verdict on a diagnosis: policy + cited evidence + claim.
@@ -209,6 +214,7 @@ export const Diagnosis = z.object({
     verifiedByRules: z.boolean().default(false),
     saplingVerification: z.union([SaplingLabel, z.literal("unsure")]).optional(),
     saplingCheck: SaplingCheck.optional(),
+    importedFrom: z.literal("@normal/contracts").optional(),
   }).strict(),
   createdAt: DateTime,
 }).strict();

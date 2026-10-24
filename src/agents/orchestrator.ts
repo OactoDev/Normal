@@ -5,6 +5,7 @@ import { loadPlanHandoff, seedDefaultPlan, storedHandoff } from "../execution/lo
 import { assertApprovalExecutable } from "../execution/validate-approval";
 import { readiness } from "../execution/dependencies";
 import { reconcileDeliveries } from "../execution/delivery-monitor";
+import { ingestConfigured, retryFailedForwards } from "../partner/ingest-forwarder";
 import { ToolError, stepDelay } from "../execution/retry-policy";
 import { log } from "../execution/execute-action";
 import { marketingAgent } from "./marketing-agent";
@@ -38,10 +39,11 @@ class AgentOrchestrator {
   async snapshot(id: string) {
     // Fire-and-forget so a slow provider never delays the poll; the next poll shows any confirmed delivery.
     void reconcileDeliveries(id).catch(e => console.error("[delivery-monitor]", e));
+    void retryFailedForwards(id).catch(e => console.error("[ingest-forwarder]", e));
     await this.sweepStale(id);
     const plan = await this.getPlan(id), executions = await this.getExecutions(id), approval = await this.getApproval(id);
     const note = approval && (await store.approvals.findOne(approval.approvalId))?._meta.note;
-    return { planId: id, planStatus: plan.status, needsAttention: executions.some(e => ["failed","cancelled"].includes(e.status)), approval, changeRequestNote: note ?? null, missions: await this.getMissions(id), executions, outcomes: await this.getOutcomes(id), emailSends: await store.emails.find({ planId: id }), details: await store.details.find({ planId: id }), logs: (await store.logs.find({ planId: id })).sort((a,b) => a.at.localeCompare(b.at)) };
+    return { planId: id, planStatus: plan.status, needsAttention: executions.some(e => ["failed","cancelled"].includes(e.status)), approval, changeRequestNote: note ?? null, missions: await this.getMissions(id), executions, outcomes: await this.getOutcomes(id), emailSends: await store.emails.find({ planId: id }), details: await store.details.find({ planId: id }), logs: (await store.logs.find({ planId: id })).sort((a,b) => a.at.localeCompare(b.at)), partnerIngest: ingestConfigured() ? await store.ingestForwards.find({ planId: id }) : [] };
   }
   /** Ends an execution that never reached a terminal state, so the plan cannot hang on it. */
   async fail(execution: ActionExecutionT, from: ActionExecutionT["status"][], code: string, message: string, retryable: boolean) {

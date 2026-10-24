@@ -27,3 +27,5 @@ export const adMetrics = new Repo("sim_ad_metrics", AdMetric);
 export const Product = z.object({ productId: z.string(), name: z.string(), priceMinor: z.number().int().positive(), stock: z.number().int().nonnegative(), dailyDemand: z.number().positive(), simulated: z.literal(true) }).strict();
 export const products = new Repo("sim_products", Product);
 export const corrections = new Repo("model_corrections", CorrectionRecord);
+export const IngestForward = z.object({ eventId: z.string(), planId: z.string(), type: z.string(), status: z.enum(["accepted", "duplicate", "rejected", "failed", "skipped"]), attempts: z.number().int().nonnegative(), event: z.record(z.unknown()).optional(), error: z.string().optional(), updatedAt: z.string().datetime() }).strict();
+export const ingestForwards = new Repo("ingest_forwards", IngestForward);
