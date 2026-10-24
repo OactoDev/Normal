@@ -34,7 +34,7 @@ Before posting: commit and push the Sapling work so the repo link shows it, and 
 >
 > Sapling's calibrated status is deliberately conservative and is often "unsure". We show it next to the verdict and gate on Sapling's top label, so a human still approves every plan that passes.
 >
-> Repo: https://github.com/OactoDev/Normal
+> Repo: https://github.com/OactoDev/Normal/tree/sapling-quest
 >
 > #NightShift #AI #ecommerce
 
@@ -44,7 +44,7 @@ Before posting: commit and push the Sapling work so the repo link shows it, and 
 > Task: Banyan Sapling checks an AI's root-cause diagnosis against the merchant's policy and evidence before Normal's agents spend money on it; a violation or missing evidence blocks the plan (8 late orders vs a 10-order rule: violation, 99%).
 > X: <X post link>
 > LinkedIn: <LinkedIn post link>
-> Repo: https://github.com/OactoDev/Normal
+> Repo: https://github.com/OactoDev/Normal/tree/sapling-quest
 
 ---
 
