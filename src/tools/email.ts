@@ -7,7 +7,7 @@ import { shippingDelayTemplate } from "./email-templates";
 import { emailProvider, sendEmail } from "./email-provider";
 export async function executeSendDelayNotice(raw: unknown, context: { planId: string; actionId: string; idempotencyKey: string }) {
   const p = EmailParams.parse(raw), provider = emailProvider();
-  const to = process.env.EMAIL_TEST_RECIPIENT || (provider === "memory" ? "controlled@example.com" : "");
+  const to = process.env.EMAIL_TEST_RECIPIENT || (["memory", "demo"].includes(provider) ? "controlled@example.com" : "");
   if (!z.string().email().safeParse(to).success) throw new ToolError("EMAIL_CONFIG", "EMAIL_TEST_RECIPIENT must be a controlled test inbox");
   const target = (await orders.find({ businessId: "nova_store", status: "delayed" })).filter(o => p.orderIds.includes(o.orderId)).slice(0,p.maxRecipients);
   if (!target.length) throw new ToolError("NO_RECIPIENTS", "No authorised delayed orders");

@@ -4,6 +4,7 @@ import { ToolError } from "../execution/retry-policy";
 const g = globalThis as typeof globalThis & { normalEthereal?: ReturnType<typeof nodemailer.createTestAccount> };
 export function emailProvider() {
   const provider = process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? "resend" : "ethereal");
+  if (provider === "demo" && process.env.PUBLIC_DEMO === "1") return provider;
   if (!["resend", "ethereal", "memory"].includes(provider) || (provider === "memory" && process.env.NODE_ENV !== "test")) throw new ToolError("EMAIL_CONFIG", "Invalid email provider; memory is test-only");
   if (provider === "resend" && !process.env.RESEND_API_KEY) return "ethereal";
   return provider;
@@ -20,7 +21,7 @@ async function etherealAccount() {
 }
 export async function sendEmail(input: { to: string; subject: string; body: string; key: string }) {
   const provider = emailProvider();
-  if (provider === "memory") return { provider, providerOperationId: `memory_${randomUUID()}`, status: "accepted" as const };
+  if (provider === "memory" || provider === "demo") return { provider, providerOperationId: `${provider}_${randomUUID()}`, status: "accepted" as const };
   const account = provider === "ethereal" ? await etherealAccount() : undefined;
   try {
     if (provider === "resend") {

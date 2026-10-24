@@ -25,6 +25,10 @@ cloudflare/.wrangler/
 # CSV data store
 data/
 *.tsbuildinfo
+.open-next/
+.wrangler/
+.dev.vars*
+.vercel/
 __pycache__/
 
 # Local demo renders, source face footage, and generated speech stay on this machine.

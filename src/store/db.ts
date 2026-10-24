@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { D1Repo } from "./d1";
 
 // Each collection is one CSV file (`key,json`) under NORMAL_DATA_DIR (default ./data).
 // Under NODE_ENV=test (unless NORMAL_STORE=csv), or NORMAL_STORE=memory, records stay in process memory so tests never touch disk.
@@ -77,15 +78,19 @@ const matches = (doc: object, filter: object) => Object.entries(filter).every(([
 
 export class Repo<T extends object> {
   private table: CsvTable;
-  constructor(readonly name: string, readonly schema: z.ZodType<T, z.ZodTypeDef, unknown>) { this.table = new CsvTable(name); }
+  private d1: D1Repo<T>;
+  constructor(readonly name: string, readonly schema: z.ZodType<T, z.ZodTypeDef, unknown>) { this.table = new CsvTable(name); this.d1 = new D1Repo(name, schema); }
   async findOne(key: string): Promise<T | undefined> {
+    if (process.env.NORMAL_STORE === "d1") return this.d1.findOne(key);
     const doc = this.table.load().get(key);
     return doc ? this.schema.parse(doc) : undefined;
   }
   async find(filter: Partial<T> = {}): Promise<T[]> {
+    if (process.env.NORMAL_STORE === "d1") return this.d1.find(filter);
     return [...this.table.load().values()].map(doc => this.schema.parse(doc)).filter(doc => matches(doc, filter));
   }
   async insert(key: string, input: T) {
+    if (process.env.NORMAL_STORE === "d1") return this.d1.insert(key, input);
     const value = this.schema.parse(input);
     return this.table.mutate(map => {
     if (map.has(key)) throw new Error(`Duplicate ${key}`);
@@ -94,6 +99,7 @@ export class Repo<T extends object> {
     });
   }
   async update(key: string, update: { $set: Partial<T> }) {
+    if (process.env.NORMAL_STORE === "d1") return this.d1.update(key, update);
     return this.table.mutate(map => {
     const merged = { ...(map.get(key) as T | undefined), ...update.$set };
     const value = this.schema.parse(merged);
@@ -102,6 +108,7 @@ export class Repo<T extends object> {
     });
   }
   async claim(key: string, input: T): Promise<boolean> {
+    if (process.env.NORMAL_STORE === "d1") return this.d1.claim(key, input);
     const value = this.schema.parse(input);
     return this.table.mutate(map => {
     if (map.has(key)) return false;
@@ -110,11 +117,13 @@ export class Repo<T extends object> {
     });
   }
   async remove(key: string) {
+    if (process.env.NORMAL_STORE === "d1") return this.d1.remove(key);
     return this.table.mutate(map => {
     if (map.delete(key)) this.table.save(map);
     });
   }
   async compareAndSet(key: string, expected: Partial<T>, changes: Partial<T>): Promise<boolean> {
+    if (process.env.NORMAL_STORE === "d1") return this.d1.compareAndSet(key, expected, changes);
     return this.table.mutate(map => {
     const old = map.get(key) as T | undefined;
     if (!old || !matches(old, expected)) return false;

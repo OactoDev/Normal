@@ -1,0 +1,30 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "normal-ops",
+	"account_id": "cf7590968e7d3a54091b3a94df6f1506",
+	"main": ".open-next/worker.js",
+	"compatibility_date": "2026-10-24",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"workers_dev": true,
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"vars": {
+		"NORMAL_STORE": "d1",
+		"PUBLIC_DEMO": "1",
+		"EMAIL_PROVIDER": "demo"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "NORMAL_DB",
+			"database_name": "normal-ops",
+			"database_id": "0470629f-9fba-41de-af03-cfa7203bca15"
+		}
+	]
+}

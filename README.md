@@ -1,84 +1,32 @@
-# Night Shift Mubit London 2026 — Team hub
+# Normal
 
-Shared event intel for **Efi** and **Izia**: Luma official copy, Discord announcements, schedule, decisions, and action items.
-
-**Official event:** [Night Shift on Luma](https://luma.com/nightshift-london)
-
-## Open in Cursor
-
-Clone this repo, open the folder as your workspace (or add it alongside Sprout in a multi-root window).
-
-```bash
-git clone git@github.com:shahaman098/night-shift-mubit-2026-team.git
-# or: git clone https://github.com/shahaman098/night-shift-mubit-2026-team.git
-cd night-shift-mubit-2026-team
-```
-
-**Repo:** https://github.com/shahaman098/night-shift-mubit-2026-team (private)
-
-## Start here
-
-| File | Purpose |
-|------|---------|
-| [digest/LIVE.md](digest/LIVE.md) | Single source of truth — read before planning builds |
-| [ACTION-ITEMS.md](ACTION-ITEMS.md) | Shared checklist |
-| [SCHEDULE.md](SCHEDULE.md) | Event timeline (update when hosts email changes) |
-| [RULES.md](RULES.md) | Submission and Mubit constraints |
-| [TEAM.md](TEAM.md) | Roles and comms |
-| [notifications/NOW.md](notifications/NOW.md) | Auto dashboard — idea/code/planning evaluation |
-| [planning/REVIEW-CHECKLIST.md](planning/REVIEW-CHECKLIST.md) | Deep review when nudged |
-
-## Persistent notifications
-
-macOS banners + `notifications/NOW.md` + `notifications/LOG.md` for schedule milestones, idea review, and Sprout code checkpoints.
-
-```bash
-cp .env.example .env   # set SPROUT_ROOT
-./scripts/notify-install.sh   # every 15 min via launchd
-./scripts/notify-status.sh
-```
-
-See [notifications/README.md](notifications/README.md). Snooze: `./scripts/notify-snooze.sh 120`.
-
-## Cloud hub (Izia + Efi)
-
-Deployed on Cloudflare (**amanshah0844@gmail.com**): password-protected dashboard + cron evaluation.
+AI agents that run an online shop's operations, and check their own diagnosis against the merchant's policy before any money is spent.
 
 | | |
 |--|--|
-| URL | https://night-shift-team-hub.kiritokris.workers.dev |
-| Auth | `Authorization: Bearer $HUB_TOKEN` (in your local `.env`, share token privately) |
-| Sync | `./scripts/cloud-sync.sh` after local edits |
-| Deploy | `./scripts/cloud-deploy.sh` |
+| **Live app** | [normal-ops.kiritokris.workers.dev](https://normal-ops.kiritokris.workers.dev) |
+| **Technical demo** | TODO: technical demo video |
+| **Ad** | TODO: ad video |
 
-Details: [cloudflare/README.md](cloudflare/README.md).
+## How it works
 
-## Discord inbox (manual)
+1. **Detect.** Normal spots an anomaly in the shop's telemetry (late deliveries, rising ad costs, bad reviews) and collects the evidence.
+2. **Diagnose.** A Mubit-routed model names the root cause.
+3. **Verify.** [Banyan Sapling](https://huggingface.co/MubitLabs/banyan-sapling) checks the diagnosis against the merchant's policy and the evidence it cites. A violation, missing evidence or contradictory evidence blocks the plan. The server runs the check again when a plan is requested, so the browser can't skip it.
+4. **Plan and approve.** Marketing, customer care and storefront agents propose actions. The merchant approves them.
+5. **Execute.** Approved actions run, and each result is read back and verified.
 
-1. Run `./scripts/new-inbox-note.sh "#announcements" "short-topic"` (or create a file under `sources/discord/inbox/`).
-2. Paste the Discord message (redact other hackers’ emails if any).
-3. Update [digest/LIVE.md](digest/LIVE.md) under **Discord updates**; add tasks to [ACTION-ITEMS.md](ACTION-ITEMS.md) if needed.
-4. Commit, then run `./scripts/merge-inbox.sh` to archive processed inbox files.
-
-## Luma refresh
+## Run locally
 
 ```bash
-./scripts/pull-luma.sh
+npm install
+cp .env.example .env   # set MUBIT_API_KEY, MUBIT_BASE_URL, MUBIT_MODEL
+npm run dev            # http://localhost:3000
+npm run test:sapling   # live Banyan Sapling checks
 ```
 
-Diff `sources/luma/latest.md` against the previous snapshot, then patch `SCHEDULE.md`, `digest/LIVE.md`, and [digest/CHANGELOG.md](digest/CHANGELOG.md).
+Built at Night Shift (Mubit, London 2026).
 
-## Build repo (submission)
+## Deploy to Cloudflare Workers
 
-Application code lives in **Sprout** (separate repo/folder). This hub only holds event intel and team coordination — not HackForge research runs.
-
-## GitHub
-
-After clone:
-
-1. **Invite Izia:** GitHub → Settings → Collaborators → Add people, or `gh api repos/:owner/:repo/collaborators/:username -X PUT` (requires admin).
-2. Never commit `.env`, API keys, or Mubit tokens — use local env only.
-
-## Secrets
-
-Copy `.env.example` to `.env` locally (gitignored) for optional placeholders like Mubit base URL.
+The public demo runs in `amanshah0844@gmail.com`, with D1 storage and separate browser sessions. Hosted ads, storefront updates and emails are simulated; Sapling checks are live. See [deployment instructions](deployment/README.md).
