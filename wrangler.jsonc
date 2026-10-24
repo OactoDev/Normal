@@ -18,7 +18,7 @@
     "PUBLIC_DEMO": "1",
     "EMAIL_PROVIDER": "demo",
     "MUBIT_BASE_URL": "https://api.mubit.ai/openai/v1",
-    "MUBIT_MODEL": "gpt-6-luna"
+    "MUBIT_MODEL": "gemini-4-argon"
   },
   "observability": {
     "enabled": true

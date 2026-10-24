@@ -46,6 +46,14 @@ async function runIntelligenceTests() {
 
   // 4. Mubit AI Diagnosis
   console.log("4. Running AI Diagnosis via Mubit proxy...");
+  // Mubit's OpenAI route and its native Gemini route take and return different shapes.
+  const isDiagnosisCall = (url: unknown) => /\/chat\/completions$|:generateContent$/.test(String(url));
+  const mockDiagnosisReply = (url: unknown, content: string, init?: ResponseInit) => Response.json(String(url).endsWith(":generateContent")
+    ? { modelVersion: "mock-diagnosis-model", candidates: [{ content: { parts: [{ text: content }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 } }
+    : { model: "mock-diagnosis-model", choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 50 } }, init);
+  const systemOf = (body: any) => body.messages?.[0]?.content ?? body.systemInstruction?.parts?.[0]?.text;
+  const userOf = (body: any) => body.messages?.[1]?.content ?? body.contents?.[0]?.parts?.[0]?.text;
+  const formatOf = (body: any) => JSON.stringify(body.response_format ?? body.generationConfig?.responseMimeType);
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.MUBIT_API_KEY;
   let diagnosisResult;
@@ -53,7 +61,7 @@ async function runIntelligenceTests() {
   const recordDiagnosisCalls = () => {
     const inner = globalThis.fetch;
     globalThis.fetch = async (url, init) => {
-      if (String(url).endsWith("/chat/completions")) sentBodies.push(JSON.parse(String(init?.body)));
+      if (isDiagnosisCall(url)) sentBodies.push({ url: String(url), ...JSON.parse(String(init?.body)) });
       return inner(url, init);
     };
   };
@@ -62,7 +70,7 @@ async function runIntelligenceTests() {
       console.log(" - Mubit HTTP is mocked for this contract test; run with MUBIT_API_KEY for live AI.");
       process.env.MUBIT_API_KEY = "test-placeholder";
       globalThis.fetch = async (url, init) => {
-        if (String(url).endsWith("/chat/completions")) return Response.json({ model: "mock-diagnosis-model", choices: [{ message: { content: JSON.stringify({ primaryCause: "delivery_delays", supportedHypotheses: [{ cause: "delivery_delays", confidence: .9, rationale: "Synthetic provider response for the diagnosis contract test.", evidenceIds: packet.evidence.filter(item => item.evidenceId.includes("ship")).map(item => item.evidenceId) }], missingEvidence: [] }) }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 50 } }, { headers: { "x-middleware-request-id": "mreq_00000000000000000000000000000001" } });
+        if (isDiagnosisCall(url)) return mockDiagnosisReply(url, JSON.stringify({ primaryCause: "delivery_delays", supportedHypotheses: [{ cause: "delivery_delays", confidence: .9, rationale: "Synthetic provider response for the diagnosis contract test.", evidenceIds: packet.evidence.filter(item => item.evidenceId.includes("ship")).map(item => item.evidenceId) }], missingEvidence: [] }), { headers: { "x-middleware-request-id": "mreq_00000000000000000000000000000001" } });
         return originalFetch(url, init);
       };
     }
@@ -123,7 +131,7 @@ async function runIntelligenceTests() {
     if (!originalKey) {
       process.env.MUBIT_API_KEY = "test-placeholder";
       globalThis.fetch = async (url, init) => {
-        if (String(url).endsWith("/chat/completions")) return Response.json({ model: "mock-diagnosis-model", choices: [{ message: { content: JSON.stringify({ primaryCause: "delivery_delays", supportedHypotheses: [{ cause: "delivery_delays", confidence: .95, rationale: "Matches the merchant-verified correction.", evidenceIds: packet.evidence.filter(item => item.evidenceId.includes("ship")).map(item => item.evidenceId) }], missingEvidence: [] }) }, finish_reason: "stop" }], usage: { prompt_tokens: 150, completion_tokens: 50 } }, { headers: { "x-middleware-request-id": "mreq_00000000000000000000000000000002" } });
+        if (isDiagnosisCall(url)) return mockDiagnosisReply(url, JSON.stringify({ primaryCause: "delivery_delays", supportedHypotheses: [{ cause: "delivery_delays", confidence: .95, rationale: "Matches the merchant-verified correction.", evidenceIds: packet.evidence.filter(item => item.evidenceId.includes("ship")).map(item => item.evidenceId) }], missingEvidence: [] }), { headers: { "x-middleware-request-id": "mreq_00000000000000000000000000000002" } });
         return originalFetch(url, init);
       };
     }
@@ -134,9 +142,9 @@ async function runIntelligenceTests() {
     if (originalKey === undefined) delete process.env.MUBIT_API_KEY; else process.env.MUBIT_API_KEY = originalKey;
   }
   const [firstCall, correctedCall] = sentBodies;
-  if (firstCall.messages[0].content !== DIAGNOSIS_INSTRUCTIONS || correctedCall.messages[0].content !== DIAGNOSIS_INSTRUCTIONS) throw new Error("The system prompt must be identical so both calls stay in one Mubit task");
-  if (firstCall.model !== correctedCall.model || JSON.stringify(firstCall.response_format) !== JSON.stringify(correctedCall.response_format)) throw new Error("Model and output format must match across the task");
-  const sentCorrections = JSON.parse(correctedCall.messages[1].content).merchantVerifiedCorrections;
+  if (systemOf(firstCall) !== DIAGNOSIS_INSTRUCTIONS || systemOf(correctedCall) !== DIAGNOSIS_INSTRUCTIONS) throw new Error("The system prompt must be identical so both calls stay in one Mubit task");
+  if (firstCall.url !== correctedCall.url || firstCall.model !== correctedCall.model || formatOf(firstCall) !== formatOf(correctedCall)) throw new Error("Model and output format must match across the task");
+  const sentCorrections = JSON.parse(userOf(correctedCall)).merchantVerifiedCorrections;
   if (sentCorrections.length !== 1 || sentCorrections[0].merchantVerifiedCause !== "delivery_delays") throw new Error("Expected the correction in the next Mubit user message");
   if (!correctedResult.modelCall.appliedCorrectionIds?.includes(correctionRecord.correction.correctionId)) throw new Error("Expected the model call to record which corrections it applied");
   if (correctedResult.modelCall.instructionsFingerprint !== diagnosisResult.modelCall.instructionsFingerprint) throw new Error("Expected one task fingerprint");

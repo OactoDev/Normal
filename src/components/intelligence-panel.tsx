@@ -211,7 +211,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <Cpu className="w-3.5 h-3.5" /> Intelligence Backend Active
               </span>
-              <span className="text-xs text-slate-500">Mubit Proxy: gpt-6-luna</span>
+              <span className="text-xs text-slate-500">Mubit Proxy: gemini-4-argon</span>
             </div>
             <h2 className="text-xl font-bold text-slate-900 mt-1">Autonomous Detection & Diagnosis Studio</h2>
             <p className="text-sm text-slate-500 mt-0.5">
@@ -405,7 +405,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-xs text-slate-500 uppercase font-semibold">Model Provider</span>
               <p className="text-base font-medium text-slate-800 mt-0.5">
-                {modelCall?.providerModel || "gpt-6-luna (Mubit)"}
+                {modelCall?.providerModel || "gemini-4-argon (Mubit)"}
               </p>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">

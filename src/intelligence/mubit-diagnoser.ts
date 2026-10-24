@@ -9,6 +9,7 @@ import {
   RootCause,
 } from "../contracts";
 import { saplingVerifier } from "./sapling-verifier";
+import { mubitModel, mubitRequest, readMubitReply } from "../llm/mubit";
 
 export interface DiagnosisExecutionResult {
   diagnosis: DiagnosisT;
@@ -28,7 +29,7 @@ export const DIAGNOSIS_INSTRUCTIONS = `You diagnose an online shop's operational
 const RESPONSE_FORMAT = { type: "json_object" } as const;
 export const MAX_CORRECTION_EXAMPLES = 6;
 
-export const diagnosisModel = () => process.env.MUBIT_MODEL || "gpt-6-luna";
+export const diagnosisModel = mubitModel;
 
 /** Hash of the parts Mubit uses to group calls into a task. Same value = same Mubit task. */
 export function diagnosisTaskFingerprint(model = diagnosisModel()) {
@@ -39,14 +40,12 @@ export function diagnosisTaskFingerprint(model = diagnosisModel()) {
 /** Mubit names a task after the first words of its instructions in the console. */
 export const DIAGNOSIS_TASK_CONSOLE_NAME = DIAGNOSIS_INSTRUCTIONS.split(" ").slice(0, 6).join(" ");
 
-export function diagnosisRequestBody(evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], model = diagnosisModel()) {
-  return {
-    model,
-    max_completion_tokens: 2048,
-    response_format: RESPONSE_FORMAT,
-    messages: [
-      { role: "system", content: DIAGNOSIS_INSTRUCTIONS },
-      { role: "user", content: JSON.stringify({
+export function diagnosisRequest(evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], model = diagnosisModel(), apiKey?: string) {
+  return mubitRequest({
+    maxTokens: 2048,
+    json: true,
+    system: DIAGNOSIS_INSTRUCTIONS,
+    user: JSON.stringify({
         evidence: evidence.map(item => ({ evidenceId: item.evidenceId, observedFact: item.observedFact, measurements: item.measurements })),
         merchantVerifiedCorrections: corrections.slice(0, MAX_CORRECTION_EXAMPLES).map(record => ({
           observedEvidence: record.examples,
@@ -54,9 +53,8 @@ export function diagnosisRequestBody(evidence: EvidenceT[], corrections: Correct
           merchantVerifiedCause: record.correction.correctedCause,
           ...(record.correction.note ? { merchantNote: record.correction.note } : {}),
         })),
-      }) },
-    ],
-  };
+      }),
+  }, model, apiKey);
 }
 
 export class MubitDiagnoser {
@@ -65,15 +63,15 @@ export class MubitDiagnoser {
     if (!apiKey) throw new MubitDiagnosisError("MUBIT_NOT_CONFIGURED", "AI diagnosis is not configured. Please contact the demo owner.", 503);
     const model = diagnosisModel();
     const applied = corrections.slice(0, MAX_CORRECTION_EXAMPLES);
-    const base = (process.env.MUBIT_BASE_URL || "https://api.mubit.ai/openai/v1").replace(/\/$/, "");
+    const request = diagnosisRequest(evidence, applied, model, apiKey);
     const started = Date.now();
     let response: Response;
     try {
-      response = await fetch(`${base}/chat/completions`, {
+      response = await fetch(request.url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        headers: request.headers,
         signal: AbortSignal.timeout(45000),
-        body: JSON.stringify(diagnosisRequestBody(evidence, applied, model)),
+        body: JSON.stringify(request.body),
       });
     } catch {
       throw new MubitDiagnosisError("MUBIT_UNAVAILABLE", "Mubit could not be reached. Please retry the diagnosis.", 503);
@@ -87,13 +85,12 @@ export class MubitDiagnoser {
     if (!requestId || !/^mreq_[a-f0-9]{32}$/i.test(requestId)) {
       throw new MubitDiagnosisError("MUBIT_INVALID_RESPONSE", "The AI response did not include a valid Mubit request ID. No diagnosis was accepted.");
     }
-    let data: any;
+    let reply: ReturnType<typeof readMubitReply>;
     let output: ReturnType<typeof DiagnosisModelOutput.parse>;
     try {
-      data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== "string" || !content.trim() || data.choices[0].finish_reason !== "stop") throw new Error("Incomplete response");
-      output = DiagnosisModelOutput.parse(JSON.parse(content));
+      reply = readMubitReply(await response.json(), model);
+      if (!reply.content?.trim() || !reply.complete) throw new Error("Incomplete response");
+      output = DiagnosisModelOutput.parse(JSON.parse(reply.content));
       const allowed = new Set(evidence.map(item => item.evidenceId));
       if (output.supportedHypotheses.some(hypothesis => hypothesis.evidenceIds.some(id => !allowed.has(id)))) throw new Error("Unknown evidence ID");
       if (output.primaryCause !== "unknown" && !output.supportedHypotheses.some(hypothesis => hypothesis.cause === output.primaryCause && hypothesis.evidenceIds.length > 0)) throw new Error("Primary cause lacks cited evidence");
@@ -104,16 +101,15 @@ export class MubitDiagnoser {
     const saplingCheck = await saplingVerifier.verifyDiagnosis(output, evidence);
     const now = new Date().toISOString();
     const modelCallId = `call_mubit_${randomUUID()}`;
-    const tokens = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
     const modelCall: ModelCallT = {
       schemaVersion: 1, modelCallId, investigationId: investigation.investigationId,
       taskKey: "normal_incident_diagnosis", promptVersion: "v1.4",
       instructionsFingerprint: diagnosisTaskFingerprint(model),
-      route: "mubit", providerModel: typeof data.model === "string" ? data.model : model,
+      route: "mubit", providerModel: reply.model,
       modelKind: "provider", sessionId: investigation.investigationId,
       inputEvidenceIds: evidence.map(item => item.evidenceId), mubitRequestId: requestId,
       appliedCorrectionIds: applied.map(record => record.correction.correctionId),
-      inputTokens: tokens(data.usage?.prompt_tokens), outputTokens: tokens(data.usage?.completion_tokens),
+      inputTokens: reply.inputTokens, outputTokens: reply.outputTokens,
       latencyMs, createdAt: now,
     };
     return {
