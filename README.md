@@ -1,4 +1,5 @@
-<img width="8931" height="3240" alt="header" src="https://github.com/user-attachments/assets/10e82588-1732-47b9-8536-d71b5cb32b43" />
+<img width="8931" height="3240" alt="header-2" src="https://github.com/user-attachments/assets/9dc36a7f-e2c7-440d-b6e4-b3d5f8be806a" />
+
 
 <img width="1920" height="1080" alt="Architecture" src="https://github.com/user-attachments/assets/11c61ae8-0ed7-4641-81ba-24b62eb4a7e2" />
 
