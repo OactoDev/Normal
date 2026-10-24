@@ -48,4 +48,16 @@ test.describe.serial("business control room", () => {
     expect(state.run.activeScenario).toBe("ad_fatigue");
     expect(JSON.stringify(state)).not.toContain("ctrFatigueStrength");
   });
+
+  test("+72h exceeds the canonical 60-tick request limit and is advanced as sequential requests", async ({ page, request }) => {
+    test.setTimeout(240_000);
+    await page.goto("/dev/simulator");
+    await page.locator("select").first().selectOption(E2E_RUN);
+    await expect(page.getByTestId("virtual-time")).toContainText("02 Oct 00:00");
+    await page.getByTestId("tick-72").click();
+    await expect(page.getByTestId("notice")).toContainText("Advanced 72h", { timeout: 200_000 });
+    await expect(page.getByTestId("virtual-time")).toContainText("05 Oct 00:00");
+    const state = await (await request.get(`/api/dev/simulator/state?simulationRunId=${E2E_RUN}`)).json();
+    expect(state.run.virtualTime).toBe("2026-10-05T00:00:00.000Z");
+  });
 });

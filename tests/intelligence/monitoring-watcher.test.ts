@@ -6,7 +6,7 @@ import { getDb } from "@/lib/mongodb";
 import { startRun, tickRun } from "@/simulator/runtime";
 import { deleteRun } from "@/simulator/persistence";
 import { checkChangeStreams, runWatcher, scheduleAndCheckpoint } from "@/intelligence/monitoring/watcher";
-import { scheduleWindow } from "@/intelligence/monitoring/schedule";
+import { jobKey, scheduleWindow } from "@/intelligence/monitoring/schedule";
 import { parseReadyWindow, windowKey } from "@/intelligence/monitoring/windows";
 import { processNext } from "@/intelligence/monitoring/process";
 
@@ -73,6 +73,32 @@ describe("actual Atlas Change Stream scheduling and restart recovery", () => {
     await start(4);
     await expect.poll(async () => db.collection(COLLECTIONS.monitoringJobs).countDocuments({ ...scope, status: "completed" }), { timeout: 15_000 }).toBe(3);
     expect(await db.collection(COLLECTIONS.monitoringJobs).countDocuments(scope)).toBe(3);
+    await stop();
+  });
+
+  it("skips a replayed insert whose window was deleted while it was down, instead of poisoning the stream", async () => {
+    // Establish a checkpoint strictly before the poison event.
+    await start(4);
+    await tickRun({ simulationRunId: scope.simulationRunId, ticks: 1 }, { businessId: scope.businessId });
+    const anchor = await latest();
+    await expect.poll(async () => (await db.collection(COLLECTIONS.monitoringWorkers).findOne({ workerId }))?.lastScheduledJobKey, { timeout: 15_000 }).toBe(jobKey(anchor));
+    await stop();
+    // While offline: a window is published and then removed (as a run reset or test cleanup does), then a valid one follows.
+    await tickRun({ simulationRunId: scope.simulationRunId, ticks: 1 }, { businessId: scope.businessId });
+    const deleted = await latest();
+    await db.collection(COLLECTIONS.monitoringWindows).deleteOne({ windowKey: deleted.windowKey });
+    await tickRun({ simulationRunId: scope.simulationRunId, ticks: 1 }, { businessId: scope.businessId });
+    const valid = await latest();
+    expect(valid.windowKey).not.toBe(deleted.windowKey);
+    const jobsBefore = await db.collection(COLLECTIONS.monitoringJobs).countDocuments(scope);
+    await start(4);
+    await expect.poll(async () => (await db.collection(COLLECTIONS.monitoringWorkers).findOne({ workerId }))?.lastScheduledJobKey, { timeout: 20_000 }).toBe(jobKey(valid));
+    const worker = (await db.collection(COLLECTIONS.monitoringWorkers).findOne({ workerId }))!;
+    expect(worker.lastSkippedWindowKey).toBe(deleted.windowKey);
+    expect(worker.lastError).toContain("Skipped change event");
+    expect(worker.connected).toBe(true);
+    expect(await db.collection(COLLECTIONS.monitoringJobs).countDocuments(scope)).toBe(jobsBefore + 1);
+    expect(await db.collection(COLLECTIONS.monitoringJobs).countDocuments({ windowKey: deleted.windowKey })).toBe(0);
     await stop();
   });
 });

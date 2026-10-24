@@ -27,7 +27,7 @@ export function handleRouteError(error: unknown, context: string): Response {
   unstable_rethrow(error);
   if (error instanceof ZodError) return apiError("validation_error", zodIssuesMessage(error), 400);
   if (error instanceof SimulatorError) return apiError(error.code, error.message, error.status);
-  if (error instanceof Error && error.name === "MonitorError") {
+  if (error instanceof Error && (error.name === "MonitorError" || error.name === "EvidenceError")) {
     const e = error as Error & { code: string; status: number };
     return apiError(e.code, e.message, e.status);
   }

@@ -19,6 +19,11 @@ export default function Home() {
           </p>
         </div>
         <div className="grid home-cards">
+          <Link href="/dashboard" className="card">
+            <span className="pill accent">Operations</span>
+            <h2>Normal dashboard</h2>
+            <p className="muted">One place to follow the pipeline — metrics, monitoring health, detected incidents, autonomous evidence retrieval and what is still to come.</p>
+          </Link>
           <Link href="/demo-store" className="card">
             <span className="pill">Shopper view</span>
             <h2>Demo store</h2>

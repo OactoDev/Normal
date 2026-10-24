@@ -1,28 +1,4 @@
-flowchart TD
-    S[Simulator or External API] --> I[Ingestion connector]
-    I --> V[Zod validation + deduplication]
-    V --> B[(MongoDB business_events)]
-    B --> M[Metric snapshots]
-    M --> A{Anomaly?}
-    A -->|Yes| INV[Investigation]
-    INV --> EV[Evidence retrieval]
-    EV --> L[Mubit gateway - recurring diagnosis]
-    L --> DI[Diagnosis schema validation]
-    DI --> P[Mubit-routed solution planner]
-    P --> PLAN[(ProposedPlan v1)]
-    PLAN --> H[Partner approval UI]
-    H -->|Approved plan version and action IDs| ORCH[Mission orchestrator]
-    ORCH --> API[Restricted action APIs]
-    API --> S
-    API --> OUT[(ActionExecution / ActionOutcome)]
-    DI --> COR[(ModelCorrection in MongoDB)]
-    COR -.->|Only if supported| TRAIN[Mubit feedback + adapter training]
-    L -.-> TRAIN
-    TRAIN --> BENCH[Independent unseen-case evaluation]
-
-%% ---------------------------------------------------------------------------
-%% Implemented architecture (Nike simulator stage). Dashed edges are private.
-%% ---------------------------------------------------------------------------
+%% Implemented Stage 4 architecture; Future nodes are explicitly unimplemented.
 flowchart LR
   subgraph Reference["Reference data service"]
     NK[nike.com/gb + investors.nike.com\npublic pages, cited & dated] --> RC[src/reference/nike-catalogue.ts\nverified cache + fallback]
@@ -103,7 +79,20 @@ flowchart LR
   MS --> DET
   DET --> GRAPH[(Atomic anomalies + incidents + investigations)]
   GRAPH --> MON[/dev/monitor]
-  GRAPH --> FUT[Future: evidence → Mubit diagnosis → ProposedPlan]
+  GRAPH --> CTX[Evidence context: anomalies · findings · affected entities · cutoff]
+  CTX --> POL[Deterministic routing policy: primary · alternative · context tools]
+  POL --> REG[Tool registry: 8 read-only tools, strict Zod inputs]
+  REG --> EV
+  REG --> MS
+  REG --> RP
+  REG --> GRAPH
+  REG --> VER[Verification: schema · source resolution · finite · cutoff · bounded · labelled]
+  VER --> EVID[(evidence canonical + evidence_details + evidence_tool_runs + evidence_collections)]
+  EVID --> DASH[/dashboard · /dashboard/architecture · /dashboard/investigations/:id/]
+  GRAPH --> DASH
+  CAP[/api/intelligence/capabilities\nmeasured readiness/] --> DASH
+  EVID --> FUT[Future: Mubit investigator → Diagnosis → ProposedPlan]
+  REG -.->|same registry, model-chosen calls| FUT
   FUT --> PLANS
   PLANS --> EXEC[Partner: approval + orchestration]
   EXEC --> AD

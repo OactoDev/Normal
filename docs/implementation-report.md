@@ -1,6 +1,192 @@
 # Implementation report — Nike business digital twin
 
-## Final verification — 24 October 2026 (resumed session)
+## Stage 4 — Autonomous evidence retrieval + unified dashboard (24 October 2026)
+
+Built on the committed Stage 3 checkpoint (`4d4623c`) without resetting data, environment or existing modules.
+The interrupted changes were audited and retained. Recovery corrections and current verification are recorded
+in this Stage 4 section; earlier simulator/monitoring verification below is historical. No contracts, detector
+thresholds or environment credentials were changed.
+
+### Deliverable A — evidence retrieval (`src/intelligence/evidence/`)
+
+| File | Responsibility |
+|---|---|
+| `types.ts` | Tool interface, `ToolInputBase` (scoped business/run, positive window ≤336 h, ≤672 h baseline, `limit` ≤200), evidence draft/result shapes, data-origin labels |
+| `registry.ts` | The eight read-only tools by stable name; nothing accepts collection names, pipelines, operators or code |
+| `context.ts` | Loads the scoped investigation, incident, anomalies, findings, catalogue labels and the observation horizon; derives the incident window (onset → last evaluated hour, ≤14 days, clamped to the data cutoff) and the pre-onset baseline (at least 24 h where history permits) |
+| `policies.ts` | Deterministic routing from themes, signal ids, canonical metrics, affected entities, polarity and severity → primary, alternative-explanation and context tools (≤8), each with a reason |
+| `orchestrator.ts` | `collectInvestigationEvidence({investigationId, businessId, simulationRunId?, collectionMode})` and `executeTool(ctx, selection, collectionId)` (shared with the future investigator): strict input parse, scope enforcement, 25 s timeout, 4-way concurrency, verification, persistence, traces |
+| `verification.ts` | Canonical `Evidence` parse; every source reference resolved in the real store within scope; finite measurements; window ≤ cutoff; bounded detail (200 KB); simulated data labelled; no causal language |
+| `persistence.ts` | `evidence` (canonical + run envelope), `evidence_details`, `evidence_collections` (lock, idempotent per cutoff), `evidence_tool_runs`; links evidence ids into the canonical investigation and moves `open` → `collecting_evidence` |
+| `provenance.ts` | Deterministic ids: new collection = hash(business, run, investigation, cutoff); existing IDs retained; tool run = hash(collection, tool, input); evidence = hash(investigation, tool, item, validated input) |
+| `queries.ts` | Scoped, filterable, paginated reads for the evidence and trace APIs |
+| `tools/` | `revenue_analysis`, `advertising_analysis`, `checkout_analysis`, `inventory_analysis`, `shipping_analysis`, `customer_feedback_analysis`, `public_reference_context`, `historical_incidents` |
+
+Data boundary: tools read canonical `business_events`, persisted hourly global `metric_snapshots`, product labels
+through the detector's existing `CATALOGUE_PROJECTION`, the detector's own anomaly/incident/investigation records and
+the verified public reference set via `src/reference/service.ts`. They never read `simulated_*` operational records,
+simulator state or ground truth; the leakage guard (`tests/intelligence/leakage.test.ts`) now also inspects the
+evidence module and the new routes, with the evidence module's own collections added to its allow-list.
+
+Shipping evidence reuses the due-date cohort semantics through the hourly snapshots (never an event-ratio delay rate).
+Revenue decomposes hourly revenue = sessions × conversion × AOV into log-change shares. Product and channel revenue is
+order-level attribution and says so. Public references carry source URL, retrieval date and the explicit statement
+that they describe the real company and cannot explain a simulated hourly anomaly. Historical retrieval returns an
+explicit empty result when nothing exists. Reviews are labelled simulated and delivery complaints as a keyword heuristic.
+
+**Routing methodology.** Always: `revenue_analysis` (impact) and the two context tools. Advertising themes/metrics
+(`ctr`, `cac_minor`, `ad_spend_minor`, frequency/paid signals) → `advertising_analysis` on the affected campaigns;
+conversion/traffic → `checkout_analysis`; fulfilment → `shipping_analysis`; inventory/demand → `inventory_analysis`;
+reputation → `customer_feedback_analysis`. Negative sales/traffic/advertising/conversion incidents add checkout,
+inventory, shipping and feedback as alternative explanations; fulfilment adds feedback; reputation adds shipping.
+Scenario labels never enter the policy (asserted by test).
+
+**Idempotency.** `initial` returns the existing completed collection for the same investigation and data cutoff.
+`refresh` re-executes in place: same collection id, same evidence ids (overwritten), tool runs replaced, attempt
+counter incremented. Concurrent requests contend on the collection lock; the loser receives
+`evidence_collection_in_progress` (409). A failed or empty tool never invalidates the others (`partial` status).
+
+### Deliverable B — unified dashboard (`src/components/normal/`, `src/app/dashboard/`)
+
+| Route / component | Content |
+|---|---|
+| `/dashboard` — `AppShell`, `RunSelector`, `OperationsOverview` | Business + run (URL `?run=`), virtual time/tick/lock, 7-day KPIs from `/api/metrics/breakdown`, latest snapshot window, monitoring health (direct trigger, measured worker heartbeat, jobs, snapshots/events persisted), pipeline readiness pills, incidents with links to the workspace, recent anomalies and investigations, links to simulator/monitor/store |
+| `/dashboard/architecture` — `ProcessFlow`, `PipelineStagePanel`, `CapabilityPlaceholder` | Clickable Observe → … → Learn; statuses from `/api/intelligence/capabilities`; implemented stages show measured data, I/O, backend and a working link (Retrieve lists the eight tools); future stages show a labelled placeholder with expected input/output and canonical contracts |
+| `/dashboard/investigations/[id]` — `InvestigationWorkspace`, `EvidenceExplorer`, `EvidenceToolTrace` | Incident overview with related anomalies and affected entities; **Collect evidence** / **Refresh**; selected tools with roles and reasons; evidence explorer filtered by tool, data origin and category with expandable measurements, verification checks, source records (business events open in the ledger route), tool input and retrieval detail; tool execution timeline (parameters, status, duration, results, errors); disabled placeholders for Mubit investigator, solution planner (ProposedPlan/PlanHandoff), partner execution boundary and outcome verification |
+
+The dashboard reuses the existing design tokens and classes; no component library or animation was added. All
+operational data comes from real routes; empty states are honest; future controls are disabled, not fake.
+
+### New API routes
+
+`POST /api/dev/investigations/:id/collect-evidence`, `GET /api/investigations/:id/evidence`,
+`GET /api/investigations/:id/evidence-trace`, `GET /api/intelligence/capabilities`; `GET /api/dev/simulator/events`
+gained an `eventId` lookup. All use the existing development/demo guard and business/run scoping (see `docs/api.md`).
+
+### Recovery audit and corrections
+
+The starting working tree contained 15 modified tracked files plus the evidence module, capability API, four new
+API route handlers, three dashboard pages, eleven dashboard components/helpers, and two new test specs. The audit
+read all tracked diffs and the new implementation. The interrupted log `/tmp/normal-vitest2.log` was recovered:
+**44 files / 231 tests passed, exit 0, 1,276.00 s**. These are prior-session results, not inferred from the report.
+A dev server was already running on port 3001; no monitoring worker process was running.
+
+Recovery fixes preserve the original implementation:
+
+- Run cleanup now removes all four evidence collections only for the requested business/run; an Atlas regression
+  checks that another run and another business survive. Existing demo records were not reset.
+- New collection identities include business and run. A scoped lookup preserves pre-existing collection IDs.
+  The regression creates the same investigation/run/cutoff in another business and verifies separate collections
+  and traces. No data migration or index removal was needed.
+- Shipping backlog queries exclude future shipment and terminal events, count distinct orders independently of the
+  bounded sample, and preserve as-of semantics. A regression covers duplicate shipped events, a later delivery,
+  a shipment after cutoff, and a sample smaller than the true backlog.
+- Dashboard cards now shrink to mobile width, navigation does not overlap the heading, and wide tables scroll
+  within their panels. The evidence expander supports keyboard activation; source links carry business scope.
+- Unknown URL run IDs remain selected and show an error instead of silently displaying another run. The run selector
+  now uses controlled state, so selection changes immediately and links use that same run while the URL transition
+  commits. Browser back/forward reads the restored `run` parameter. Overview, process flow and investigation loaders
+  use request sequence guards; previous-run content is hidden immediately and late responses cannot replace the
+  selected run's data. Backend APIs continue to enforce business/run scope independently.
+- Three unused imports were removed. Browser setup now restores the previously active storefront run on teardown,
+  unless an operator has selected an unrelated run in the meantime.
+- `docs/api.md` now distinguishes the original target API from implemented routes. The two original Mermaid
+  diagrams were separated into `architecture.mmd` (implemented) and `architecture-roadmap.mmd` (future), preserving
+  both graphs as independently renderable files.
+
+### Stage 4 verification
+
+Fresh verification in this recovery:
+
+| Check | Command | Result |
+|---|---|---|
+| Contract TypeScript | `npm run contracts:typecheck` | pass, zero errors |
+| Canonical contract fixtures | `npm run contracts:validate` | **15/15 valid** |
+| Application TypeScript | `npx tsc --noEmit` | pass, zero errors |
+| ESLint | `npm run lint` | pass, zero errors and warnings |
+| Full unit/integration suite | `npx vitest run` | **46 files, 234 passed, 0 failed, 0 skipped**; sequential Atlas-backed suites |
+| Change Stream capability | `npm run monitor:check` | pass, replica set verified |
+| Focused rapid run-selection regression | `E2E_BASE_URL=http://localhost:3001 npx playwright test tests/e2e/dashboard.spec.ts --grep 'rapid run changes'` | **2/2 passed**, desktop Chromium and Pixel 7; includes browser back/forward |
+| Full browser suite | `E2E_BASE_URL=http://localhost:3001 npx playwright test` | **26/26 passed**, desktop Chromium and Pixel 7 |
+| Production build | `npm run build` in an isolated copy of the working tree | pass; Next.js 16.4.3 compiled and generated all static pages |
+
+The first browser attempt exposed a strict Playwright locator matching two run selectors on the investigation page.
+The regression now explicitly targets the header selector; its selected-run assertion remains intact. No product
+assertions were weakened, and no tests were removed. The production build used a temporary local dependency tree
+because Turbopack cannot resolve a `node_modules` symlink outside its build root; the existing development server
+on port 3001 remained available throughout.
+
+### Existing demonstration and data preservation
+
+Before testing, `nike_demo.activeSimulationRunId` was `demo_nike`. A read-only SHA-256 inventory captured all
+24 nonempty run-scoped collections in `/tmp/normal-stage4-recovery/demo-before.json`: 5,790 canonical events,
+132 metric snapshots, 105 orders, 4,843 sessions, six anomalies, one incident, one investigation, seven evidence
+records, seven detail records, one collection and eight tool traces. The run was already at tick 96, virtual
+`2026-10-05T00:00:00.000Z`, so restoration of simulator data was unnecessary.
+
+Investigation `inv_demo_nike_d07498fe5b17` was opened and collected through the existing API. Collection was reused;
+evidence stayed at seven records. Revenue, advertising and checkout were selected as primary tools; inventory,
+shipping and customer feedback as alternatives; historical incidents and public references as context. Six tools
+returned evidence; feedback and history correctly returned empty results. All 277 source references resolved to
+183 distinct records. Wrong-business and wrong-run reads returned 404. Scanning persisted evidence/details found
+none of the tested hidden parameters or scenario labels. The legacy collection ID was preserved.
+
+Isolated live demonstration via `npm run demo:stage4 -- http://localhost:3001`:
+
+- Run `demo_stage4_1792857791331`; active storefront pointer remained `demo_nike`.
+- Standalone Change Stream worker completed all **3 persisted monitoring jobs**; the detector persisted an advertising
+  investigation `inv_demo_stage4_1792857791331_d07498fe5b17`.
+- Evidence collection and refresh completed through the actual APIs. The collection retained one collection ID,
+  reached refresh attempt 2, and returned **7 evidence records and 8 tool traces** without duplicate evidence IDs.
+- All **183 source records** resolved within business/run scope. Evidence and trace output contained none of the
+  checked hidden simulator labels or ground-truth fields.
+- Headless browser inspection confirmed the overview links to the correct run, the investigation is visible, the
+  evidence explorer displays seven records, and the timeline shows eight executions (**6 completed, 2 empty**).
+- Afterward, all **24 saved `demo_nike` collection checksums matched** `/tmp/normal-stage4-recovery/demo-before.json`,
+  and `nike_demo.activeSimulationRunId` was `demo_nike`.
+- The first attempted isolated run (`demo_stage4_1792857559987`) exposed the script's former fixed three-job wait:
+  it persisted an investigation after four jobs, then the script was stopped before evidence collection. That run
+  remains isolated and inactive; no `demo_nike` records were reset or overwritten. The successful run above used the
+  corrected persisted-window count. After the browser suite, the active pointer was conditionally restored from the
+  E2E fixture value `e2e_run` to the saved `demo_nike` value before the demonstration.
+
+### Repeatable isolated demonstration
+
+```bash
+npm run dev -- -p 3001
+# In a second terminal:
+npm run monitor:watch
+# In a third terminal, after the worker has connected:
+npm run demo:stage4 -- http://localhost:3001
+```
+
+`scripts/demo-stage4.ts` creates a unique run with `reset:false, makeActive:false`; it advances 36 + 36 healthy hours,
+injects advertising deterioration at severity 0.8, then advances 24 hours. Direct simulator service calls bypass
+Next.js `after()`, so the script waits until every monitoring window actually persisted for that run has a completed
+job; it does not assume a fixed window count.
+The script collects and refreshes through Next.js APIs, checks persisted traces and source references, rejects hidden
+labels, verifies unchanged evidence IDs/counts, checks the active storefront pointer, and prints the new URLs.
+It retains the isolated run for inspection. No Mubit reasoning or solution planning is invoked.
+
+### Current Stage 4 limitations
+
+- Retrieval is deterministic policy-driven orchestration, initiated by **Collect evidence** or the API. It is not
+  automatically invoked when every investigation opens, and is not a Mubit investigator.
+- Business/run filters provide data isolation, not production tenant authentication. Dashboard UI targets `nike_demo`;
+  service APIs support validated business scope. Dev/demo endpoints require their existing guard.
+- Mubit diagnosis, solution planning, approval/orchestration, outcome verification and learning remain unimplemented
+  or partner-pending, with disabled controls. Existing adapters and canonical contracts are preserved.
+- Evidence references and detail rows are bounded; references sample larger event sets. Shipping backlog counts are
+  complete while backlog rows are sampled. Public references are dated stored/cache context, not live external research.
+- The workspace loads the newest 100 evidence records and five collection histories; the read APIs expose pagination.
+  Refresh replaces the same-cutoff trace attempt rather than retaining every attempt as an immutable history.
+- A collection uses a 120 s lock and 25 s tool execution deadline. Process-crash recovery requires a retry/refresh
+  after expiry; evidence/detail/trace writes are not an all-or-nothing transaction. Production hardening remains later work.
+- Revenue product/channel attribution is order-level; review delivery mentions use a labelled keyword heuristic;
+  small shipping/review cohorts are explicitly marked weak. These observations do not establish root cause.
+
+
+## Earlier simulator/monitoring verification — 24 October 2026 (historical session)
 
 This section records the state after the third agent session resumed the interrupted regression run. Nothing from
 the earlier sessions was regenerated or reverted; one UI defect was fixed and the complete verification was re-run.
@@ -18,16 +204,38 @@ The second session's uncommitted work (42 modified files, plus `src/intelligence
 `scripts/monitor-watch.ts` and three new test files) was inspected and preserved in full. No contract schema, threshold,
 test assertion or environment file was changed.
 
-### Defect found and fixed
+### Defects found and fixed
 
-The interrupted Playwright run had left two failures (desktop and mobile) in
-`tests/e2e/monitor.spec.ts › shows API-backed incidents…`: after `selectOption("e2e_monitor")` the page still showed
-`e2e_run`. Cause: the run-list effect in `src/components/monitor/MonitorConsole.tsx` had no cancellation. `next dev`
-runs React Strict Mode, so the mount effect executes twice; the second, slower `/api/dev/simulator/runs` response
-reset `runId` to the active run after the operator had already changed the selector, and in-flight `load()`
+**1. Monitor run selector reset (Strict Mode race).** The interrupted Playwright run had left two failures (desktop and
+mobile) in `tests/e2e/monitor.spec.ts › shows API-backed incidents…`: after `selectOption("e2e_monitor")` the page
+still showed `e2e_run`. Cause: the run-list effect in `src/components/monitor/MonitorConsole.tsx` had no cancellation.
+`next dev` runs React Strict Mode, so the mount effect executes twice; the second, slower `/api/dev/simulator/runs`
+response reset `runId` to the active run after the operator had already changed the selector, and in-flight `load()`
 responses could populate the page with another run's data. Fix: a cancellation flag on the mount effect, the
 selected run mirrored in a ref so late responses for a run that is no longer selected are discarded, and the
 status/anomaly/incident panels cleared on run change. No test was weakened; the same spec now passes on both projects.
+A follow-up line-level audit confirmed the component's render tree, handlers and all original test ids are otherwise
+identical to the committed version.
+
+**2. Change Stream watcher poisoned by a deleted window (found while running the demo).** After the test suites had
+reset/deleted runs, a restarted worker resumed from its stored token and replayed an `insert` for a
+`monitoring_windows` document that no longer existed. `scheduleWindow` correctly refused it ("not durably
+published"), but the watcher treated that as a transport failure, reconnected with the *same* resume token and hit
+the same event again — forever. The checkpoint stayed at 08:37, the status API showed "no current connection", and
+only the 30-second reconciliation kept jobs flowing. Fix in `src/intelligence/monitoring/watcher.ts`: when the
+handoff for an event fails, the worker checks whether that `windowKey` still exists as a valid ready record. If it
+does, the failure is transient and is retried as before (no checkpoint). If the window is gone or invalid, the event
+can never be scheduled, so it is skipped: the resume token is checkpointed past it and `lastSkippedWindowKey`/`lastError`
+record the skip for operators. New regression test `monitoring-watcher.test.ts › skips a replayed insert whose window
+was deleted…` (verified to fail on the old code). Restarting the real worker against the poisoned checkpoint recovered
+immediately; it then stayed connected through a full Playwright run that resets runs.
+
+**3. Control room `+72h` always failed.** The button sent `ticks: 72`, but canonical `SimulatorTickRequest` caps a
+request at 60 ticks, so the server answered 400 and the control room displayed the validation error. The component was
+unchanged since the initial commit, so this predates both agent sessions; existing E2E only exercised `+24h`. Fix in
+`src/components/control-room/ControlRoom.tsx`: jumps above 60 ticks are issued as sequential ≤60-tick requests, each
+with its own idempotency key, and the notice sums the events. The contract was not touched. New E2E test
+`control-room.spec.ts › +72h exceeds the canonical 60-tick request limit…` (both projects).
 
 ### Verification results (fresh, this session, against Atlas `normal_dev`)
 
@@ -37,20 +245,32 @@ status/anomaly/incident panels cleared on run change. No test was weakened; the 
 | Contract fixtures | `npm run contracts:validate` | 15/15 valid |
 | TypeScript | `npx tsc --noEmit` | 0 errors |
 | ESLint | `npm run lint` | 0 errors, 0 warnings |
-| Backend suites | `npx vitest run` | **43 files, 220 tests passed, 0 failed, 0 skipped** (1 202 s; files run sequentially against Atlas) |
+| Backend suites | `npx vitest run` | **43 files, 220 tests passed, 0 failed, 0 skipped** (1 202 s; files run sequentially against Atlas); the watcher suite was re-run after fix 2 → **5/5** (221 tests in total) |
 | — monitoring jobs / direct trigger | `tests/intelligence/monitoring-jobs.test.ts` | 7/7 |
-| — real Change Stream watcher | `tests/intelligence/monitoring-watcher.test.ts` | 4/4 (actual Atlas cursor, restart, missed-notification recovery) |
+| — real Change Stream watcher | `tests/intelligence/monitoring-watcher.test.ts` | 5/5 (actual Atlas cursor, restart, missed-notification recovery, deleted-window skip) |
 | — crash/retry reliability | `tests/intelligence/monitoring-reliability.test.ts` | 3/3 |
 | — persistence/API/scoping | `tests/intelligence/db-detection.test.ts` | 14/14 |
 | — detector data boundary | `tests/intelligence/leakage.test.ts` | 7/7 |
 | — scenario evaluation (15 seeds, in memory) | `tests/intelligence/evaluation.test.ts` | 8/8 |
 | — simulator/ingestion/analytics/adapters/routes/full-system regression | remaining suites | all passed |
 | Production build | `npm run build` | success; 25 routes (3 static, 22 dynamic), no warnings |
-| Browser end-to-end | `npx playwright test` | **14/14 passed** (desktop Chromium + Pixel 7; storefront, control room, monitor) |
+| Browser end-to-end | `npx playwright test` | **16/16 passed** (desktop Chromium + Pixel 7; storefront, control room incl. +72h, monitor); last run against the live demo server with the worker attached |
 | Atlas Change Stream capability | `npm run monitor:check` | "Change Streams verified (replica set)" |
 
 The earlier session's partial counts (56 focused detector tests, 17 persistence/shipping, 42 simulator, 13 direct
-trigger, 4 Change Stream, 14 reliability) are all contained in the 220 above.
+trigger, 4 Change Stream, 14 reliability) are all contained in the totals above.
+
+### Product demo through the UI (`demo_nike`, active storefront run)
+
+Driven entirely through the browser on `npm run dev` (:3001) with `npm run monitor:watch` running: **Start / reset run**
+`demo_nike` seed 42 → **+72h** (now two sequential requests; 4,948 events; £11.0k revenue, 94 orders, CTR 1.96%) →
+3 ready windows, 3 jobs, worker checkpoint on the latest job, 0 investigations → **Inject** Ad fatigue 0.80 → **+24h**
+(838 events; CTR and paid sessions fall, CPA £27) → `/dev/monitor` auto-selects the active run and, without a manual
+scan, shows *Advertising performance deterioration across 5 campaigns — critical · 89.6*, 6 canonical anomalies,
+21 findings, worker *connected (recent heartbeat)*, 4 completed jobs; **Open investigation** lists 24 metric snapshots
+and 89 source records. The incident job was the one both triggers converged on (`attempts: 1`); one investigation.
+Resetting and replaying the run reproduced the identical investigation id (`inv_demo_nike_d07498fe5b17`).
+`/demo-store` shows the active run's virtual clock.
 
 ### Live Method A + Method B demonstration
 
@@ -90,7 +310,12 @@ held-out seed) and none on the fresh held-out seeds. No threshold was adjusted i
   Graceful SIGINT/SIGTERM releases both immediately.
 - `POST /api/dev/monitor/run` on a run created before the monitoring stage (no hourly global snapshots) cannot
   publish a ready window and returns an error; such runs need a fresh tick first.
-- The `e2e_run`, `e2e_monitor` and `t_live_*` runs in `nike_demo` are test artefacts visible in the run selectors.
+- The `e2e_run`, `e2e_monitor` and `t_live_*` runs in `nike_demo` are test artefacts visible in the run selectors;
+  `demo_nike` is the current active demo run.
+- Skipped stream events (deleted/invalid windows) are surfaced only through the worker's `lastError`/`lastSkippedWindowKey`
+  in the status API, not yet in the UI.
+- Long jumps (`+72h`) are two sequential requests; a failure between them leaves the clock at the first boundary,
+  which the notice and virtual-time pill show accurately.
 
 ### Commands
 
@@ -198,7 +423,10 @@ exactly-once execution across a process crash. Existing closed investigations ar
 
 The watcher has its own singleton lease and durable BSON resume token. It checkpoints only after the job is
 durably scheduled, retries stream connections with bounded backoff, and reconciles every 30 seconds independently
-of the stream. Invalid/expired resume tokens are discarded and reconciliation supplies recovery. Producer recovery
+of the stream. Invalid/expired resume tokens are discarded and reconciliation supplies recovery. A replayed insert
+whose window has since been deleted or invalidated is skipped and checkpointed past (recorded as
+`lastSkippedWindowKey`), so a reset run cannot poison the stream; transient scheduling failures are still retried
+without advancing the checkpoint. Producer recovery
 also finds clock commits lacking metrics/ready records. Graceful shutdown closes the cursor and releases ownership.
 The monitor UI reports a connection only while a connected worker has a recent heartbeat and unexpired lease.
 

@@ -61,7 +61,11 @@ the monitor creates only the collections it uses.
 | `detection_observations` | unique business/observationId | Finding measurements at each scan boundary |
 | `incidents` | unique business/run/incidentId | Correlated findings, severity history and canonical investigation link |
 | `anomalies` | unique business/anomalyId | Validated canonical `Anomaly` plus storage-only run envelope |
-| `investigations` | unique business/investigationId | Validated canonical `Investigation` plus storage-only run envelope |
+| `investigations` | unique business/investigationId | Validated canonical `Investigation` plus storage-only run envelope; `evidenceIds` and `collecting_evidence` status are set by evidence retrieval |
+| `evidence` | unique business/evidenceId; business/investigationId | Validated canonical `Evidence` plus storage-only run envelope. `evidenceId` = hash(investigation, tool, item key, validated input) so identical retrievals upsert in place |
+| `evidence_details` | unique business/evidenceId | Internal 1:1 companion: tool, input, data origin, comparison rows/series, warnings, verification checks, retrieval time |
+| `evidence_collections` | unique `collectionId` = hash(business, run, investigation, data cutoff); existing IDs retained; business/run/investigation/startedAt | One collection run per cutoff: mode, status (running/completed/partial/failed), lock, selected tools with reasons, completed/failed/empty tools, evidence ids, windows, attempt |
+| `evidence_tool_runs` | unique `toolRunId`; business/investigation/collection/startedAt | Every tool execution: parameters, role, reason, status, duration, result/evidence/source counts, warnings, error, data sources |
 
 The job key is SHA-256 of the JSON tuple `(businessId, simulationRunId, windowStart, windowEnd, detectorVersion)`.
 Ready-window and job upserts use majority acknowledgement. The linked incident graph is committed in one
@@ -70,8 +74,12 @@ transaction that also checks the detector lease; deterministic evidence snapshot
 Producer publication progress (`monitoringBatch`, `monitoringPublishedThrough`, `publicationLock`) lives on
 the existing run record. Only `src/simulator/monitoring.ts` reads those clock/progress fields. Detector modules
 never read private simulation state. A crash after the clock commit but before metric/ready publication is recovered
-from this durable producer progress. Tests/reset cleanup includes monitoring windows/jobs for the specified run only.
+from this durable producer progress. Tests/reset cleanup includes monitoring windows/jobs and all four Stage 4 evidence collections (`evidence`,
+`evidence_details`, `evidence_collections`, `evidence_tool_runs`) for the specified business/run only. This prevents
+stale evidence and collection locks from surviving an explicitly requested run reset.
 
-Worker checkpoints advance only after the corresponding job upsert succeeds. A periodic anti-join finds ready
+Worker checkpoints advance only after the corresponding job upsert succeeds, or when a replayed insert refers to a
+window that has since been deleted or invalidated (the skip is recorded in `monitoring_workers.lastSkippedWindowKey`
+and `lastError`). A periodic anti-join finds ready
 windows without a job even if the stream checkpoint is missing or expired. Failed/expired jobs are reclaimed by
 the normal job processor; exhausted jobs remain visible for operator review rather than being silently reset.

@@ -1,6 +1,14 @@
 # HTTP API contract (v1)
 
-All responses are JSON. Normal's backend derives `businessId` from an authenticated tenant context in production; never trust arbitrary user-supplied business IDs for access control. For demo, use a single `nova_store` tenant. Use `schemaVersion: 1` for persisted records.
+All responses are JSON. The implemented demo defaults to `nike_demo` and validates caller-supplied business/run IDs.
+Production tenant authentication is **not implemented**; validated IDs are data scoping, not tenant authorization.
+Persisted canonical records use `schemaVersion: 1`.
+
+## Target API roadmap (not an implementation inventory)
+
+The table below preserves the original integration plan. Diagnosis, planning, approval, execution orchestration,
+correction and evaluation HTTP endpoints are **not implemented**. Simulator and monitor endpoints use `/api/dev/`
+in the actual application. The implemented endpoint inventory follows below.
 
 | Method | Path | Body / response | Owner |
 |---|---|---|---|
@@ -78,7 +86,7 @@ half-open `[startAt, endAt)` in **virtual** time.
 | POST | `/api/dev/simulator/tick` | canonical `SimulatorTickRequest` → canonical `SimulatorTickResponse` (`metricSnapshotIds` = one hourly global snapshot per tick). Optional `Idempotency-Key` header replays the stored response. **409 `run_locked`** when another tick/inject is running. |
 | POST | `/api/dev/simulator/inject` | canonical `InjectScenarioRequest` → run summary. Writes private ground truth; never returns it. |
 | GET | `/api/dev/simulator/state?simulationRunId` | run summary + `inventory[]`, `campaigns[]` (budget/status/totals, no hidden params), `storefront`, `shipments{status→count}`, `recentReviews[]`, `recentShipments[]`, `counts` |
-| GET | `/api/dev/simulator/events?simulationRunId&type&limit≤200` | `{ simulationRunId, events: BusinessEvent[] }` newest first |
+| GET | `/api/dev/simulator/events?simulationRunId&type&eventId&limit≤200` | `{ simulationRunId, events: BusinessEvent[] }` newest first |
 | GET | `/api/dev/simulator/runs` | `{ activeSimulationRunId, runs: (SimulatorRun & {tickIndex,totals})[] }` |
 | POST | `/api/dev/plans/seed-fixture` | loads `examples/plan-handoff.json` into `plans`/`diagnoses`/`evidence` |
 
@@ -110,6 +118,21 @@ All monitoring routes use the same development/demo-key guard as simulator contr
 | GET | `/api/incidents` | Correlated observations, severity, investigation policy and linked IDs. Filters: business/run, status, severity, category; same pagination. |
 | GET | `/api/investigations` | Canonical investigations and incident metadata. Filters: business/run, status; same pagination. |
 | GET | `/api/investigations/:id?businessId&simulationRunId` | Scoped investigation, anomalies, metric snapshots, findings, source references and bounded event queries. Business defaults to `nike_demo`; an incorrect business or supplied run returns 404. |
+
+### Evidence retrieval and dashboard (dev/demo)
+
+All four routes below use the development/demo-key guard, including the read endpoints outside `/api/dev/`.
+
+| Method | Path | Behaviour |
+|---|---|---|
+| POST | `/api/dev/investigations/:id/collect-evidence` | `{businessId?, simulationRunId?, collectionMode?: "initial" \| "refresh"}`. Deterministic tool selection from the investigation's observed anomalies, bounded concurrent execution (≤8 tools, 4 at a time, 25 s each), verification, persistence. `initial` returns the existing collection for the same data cutoff; `refresh` re-executes in place (same evidence IDs). 409 `evidence_collection_in_progress` while another collection holds the lock; 404 outside the business/run scope. |
+| GET | `/api/investigations/:id/evidence?businessId&simulationRunId&tool&category&dataOrigin&from&to&limit&offset` | Canonical `Evidence` records plus, per item, the tool, data origin, retrieval detail, tool input and verification checks. `latestCollection` summarises the newest run. |
+| GET | `/api/investigations/:id/evidence-trace?businessId&simulationRunId&limit` | Collection runs (selected tools with reasons, windows, cutoff, status, attempt) and every tool execution (parameters, status, duration, result/evidence/source counts, warnings, error, data sources). |
+| GET | `/api/intelligence/capabilities?businessId&simulationRunId` | Measured readiness of the nine pipeline stages (operational / waiting for data / running / failed from persisted records; not implemented / partner pending from implementation metadata) plus the registered tool list. |
+| GET | `/api/dev/simulator/events?…&eventId=` | Existing ledger route; `eventId` returns one cited canonical event so a source reference can be opened independently. |
+
+Evidence tool inputs are strict Zod schemas: business/run scope (validated against the investigation), positive windows up to 336 h,
+optional ≤672 h baseline, ≤20 entity ids, `limit` ≤200. No collection names, pipelines, operators or code are accepted.
 
 The detector reports observations and correlations, never a definitive cause. The v1 canonical metric enum
 does not contain ROAS, stock units, checkout failures or social mentions. These remain supplementary

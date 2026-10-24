@@ -54,7 +54,7 @@ const LOCK_MS = 120_000;
 /** Observable catalogue labels only (name + category). Simulator latent parameters are never projected. */
 export const CATALOGUE_PROJECTION = { _id: 0, productId: 1, name: 1, category: 1 } as const;
 
-async function loadCatalogue(db: Db, businessId: string, simulationRunId: string): Promise<Map<string, CatalogueLabel>> {
+export async function loadCatalogue(db: Db, businessId: string, simulationRunId: string): Promise<Map<string, CatalogueLabel>> {
   const docs = await db.collection(COLLECTIONS.simulatedProducts).find({ businessId, simulationRunId }, { projection: CATALOGUE_PROJECTION }).toArray();
   return new Map(docs.map((d) => [d.productId as string, { name: d.name as string, category: d.category as string }]));
 }

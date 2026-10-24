@@ -35,6 +35,9 @@ export const COLLECTIONS = {
   monitoringWindows: "monitoring_windows",
   monitoringJobs: "monitoring_jobs",
   monitoringWorkers: "monitoring_workers",
+  evidenceCollections: "evidence_collections",
+  evidenceToolRuns: "evidence_tool_runs",
+  evidenceDetails: "evidence_details",
 } as const;
 
 let indexesReady: Promise<void> | undefined;
@@ -84,6 +87,12 @@ export function ensureIndexes(db?: Db): Promise<void> {
         d.collection(COLLECTIONS.plans).createIndex({ businessId: 1, planId: 1, planVersion: 1 }, { unique: true }),
         d.collection(COLLECTIONS.diagnoses).createIndex({ businessId: 1, diagnosisId: 1 }, { unique: true }),
         d.collection(COLLECTIONS.evidence).createIndex({ businessId: 1, investigationId: 1 }),
+        d.collection(COLLECTIONS.evidence).createIndex({ businessId: 1, evidenceId: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.evidenceCollections).createIndex({ collectionId: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.evidenceCollections).createIndex({ businessId: 1, simulationRunId: 1, investigationId: 1, startedAt: -1 }),
+        d.collection(COLLECTIONS.evidenceToolRuns).createIndex({ toolRunId: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.evidenceToolRuns).createIndex({ businessId: 1, investigationId: 1, collectionId: 1, startedAt: 1 }),
+        d.collection(COLLECTIONS.evidenceDetails).createIndex({ businessId: 1, evidenceId: 1 }, { unique: true }),
         d.collection(COLLECTIONS.actionReceipts).createIndex({ businessId: 1, idempotencyKey: 1 }, { unique: true }),
         d.collection(COLLECTIONS.anomalies).createIndex({ businessId: 1, anomalyId: 1 }, { unique: true }),
         d.collection(COLLECTIONS.anomalies).createIndex({ businessId: 1, simulationRunId: 1, detectedAt: -1 }),

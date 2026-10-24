@@ -209,3 +209,23 @@ code, .mono { font-family: var(--font-mono); font-size: 12px; }
 @media (max-width: 760px) { .event { grid-template-columns: 1fr; gap: 2px; } }
 .event .t { color: var(--accent); }
 .range { width: 100%; accent-color: var(--accent); }
+
+/* Unified dashboard: let grid children shrink and keep wide records inside their scroll panels. */
+.normal-dashboard { padding-left: 16px; padding-right: 16px; }
+.normal-dashboard * { min-width: 0; }
+.normal-dashboard .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.normal-dashboard .card, .normal-dashboard .order, .normal-dashboard .scroll-x { max-width: 100%; }
+.normal-dashboard .card-head { flex-wrap: wrap; }
+.normal-dashboard .small, .normal-dashboard code { overflow-wrap: anywhere; }
+.normal-dashboard .pill { white-space: normal; overflow-wrap: anywhere; }
+.normal-dashboard .scroll-x table { min-width: 640px; overflow-wrap: normal; }
+.normal-dashboard .scroll-x td, .normal-dashboard .scroll-x th,
+.normal-dashboard .scroll-x .small, .normal-dashboard .scroll-x code { overflow-wrap: normal; }
+.normal-dashboard .scroll-x code, .normal-dashboard .scroll-x .pill { white-space: nowrap; }
+.normal-dashboard [data-testid="tool-trace"] td:nth-child(2) { min-width: 260px; }
+.normal-dashboard .select { max-width: 100%; }
+.normal-topbar .topbar-inner { height: auto; min-height: 60px; padding-top: 10px; padding-bottom: 10px; flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .normal-dashboard .two { grid-template-columns: minmax(0, 1fr); }
+  .normal-topbar { position: static; }
+}

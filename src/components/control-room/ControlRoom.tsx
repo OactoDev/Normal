@@ -100,13 +100,20 @@ export function ControlRoom() {
     await refresh(summary.run.simulationRunId);
   });
 
+  // Canonical SimulatorTickRequest allows at most 60 ticks per request; longer jumps are issued as sequential requests.
+  const MAX_TICKS_PER_REQUEST = 60;
   const tick = (ticks: number) => act(`tick-${ticks}`, async () => {
     if (!runId) return;
-    const key = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now());
-    const res = await api<{ generatedEventsCount: number; virtualTime: string }>("/api/dev/simulator/tick", {
-      method: "POST", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ simulationRunId: runId, ticks }),
-    });
-    setNotice(`Advanced ${ticks}h · ${num(res.generatedEventsCount)} canonical events ingested · now ${virtualDate(res.virtualTime)}.`);
+    let remaining = ticks, events = 0, virtualTime = "";
+    while (remaining > 0) {
+      const chunk = Math.min(remaining, MAX_TICKS_PER_REQUEST);
+      const key = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${remaining}`;
+      const res = await api<{ generatedEventsCount: number; virtualTime: string }>("/api/dev/simulator/tick", {
+        method: "POST", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ simulationRunId: runId, ticks: chunk }),
+      });
+      events += res.generatedEventsCount; virtualTime = res.virtualTime; remaining -= chunk;
+    }
+    setNotice(`Advanced ${ticks}h · ${num(events)} canonical events ingested · now ${virtualDate(virtualTime)}.`);
     await refresh(runId);
   });
 

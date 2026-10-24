@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "monitor:watch": "node --conditions=react-server --import tsx scripts/monitor-watch.ts",
     "monitor:check": "node --conditions=react-server --import tsx scripts/monitor-watch.ts --check",
-    "verify": "npm run contracts:typecheck && npm run contracts:validate && npm run typecheck && npm run lint && npm run test"
+    "verify": "npm run contracts:typecheck && npm run contracts:validate && npm run typecheck && npm run lint && npm run test",
+    "demo:stage4": "node --conditions=react-server --import tsx scripts/demo-stage4.ts"
   },
   "dependencies": {
     "mongodb": "^7.7.0",

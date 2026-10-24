@@ -34,6 +34,29 @@ export async function scheduleAndCheckpoint(db: Db, document: Document, resumeTo
   return key;
 }
 
+/**
+ * A replayed insert whose window has since been deleted (run reset/cleanup) or is no longer a valid ready record can
+ * never be scheduled. Retrying it with the same resume token would poison the stream forever, so it is skipped and the
+ * checkpoint advances past it. A window that still exists and validates is a transient failure and must be retried.
+ */
+export async function isUnschedulableEvent(db: Db, document: Document | undefined): Promise<boolean> {
+  const windowKey = document?.windowKey;
+  if (typeof windowKey !== "string") return true;
+  const durable = await db.collection(COLLECTIONS.monitoringWindows).findOne({ windowKey }, { projection: { _id: 0 } });
+  if (!durable) return true;
+  try { parseReadyWindow(durable); return false; } catch { return true; }
+}
+
+async function skipEvent(db: Db, change: { fullDocument?: Document; _id: ResumeToken }, workerId: string, ownerToken: string, error: unknown): Promise<void> {
+  const checkpoint = await db.collection(COLLECTIONS.monitoringWorkers).updateOne(
+    { workerId, "lock.token": ownerToken, "lock.until": { $gt: new Date() } },
+    { $set: { resumeToken: change._id, checkpointAt: new Date(), lastSkippedWindowKey: change.fullDocument?.windowKey ?? null,
+      lastError: `Skipped change event for a deleted or invalid window: ${describeDbError(error).slice(0, 500)}` } },
+    { writeConcern: { w: "majority" } },
+  );
+  if (!checkpoint.matchedCount) throw new Error("Watcher lease lost before checkpoint");
+}
+
 interface WatchOptions {
   signal: AbortSignal;
   workerId?: string;
@@ -96,7 +119,12 @@ export async function runWatcher(db: Db, options: WatchOptions): Promise<void> {
             options.onConnected?.();
           }
           if (change?.operationType === "insert") {
-            await scheduleAndCheckpoint(db, change.fullDocument, change._id, workerId, token);
+            try {
+              await scheduleAndCheckpoint(db, change.fullDocument, change._id, workerId, token);
+            } catch (e) {
+              if (!(await isUnschedulableEvent(db, change.fullDocument))) throw e;
+              await skipEvent(db, change, workerId, token, e);
+            }
             resumeToken = change._id;
           }
         } catch (e) {
