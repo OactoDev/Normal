@@ -3,12 +3,6 @@ import Link from "next/link";
 export default function Home() {
   return (
     <>
-      <div className="notice">
-        <div className="shell">
-          <strong>Nike — Unaffiliated Simulation.</strong>
-          <span>Public product names and list prices are cited from nike.com/gb; every order, campaign and customer below is synthetic. Nike has not authorised or connected to this project.</span>
-        </div>
-      </div>
       <main className="shell home">
         <div style={{ display: "grid", gap: 16 }}>
           <span className="pill accent">Normal · Mubit Night Shift</span>

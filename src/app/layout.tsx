@@ -20,7 +20,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <footer className="demo-disclaimer">
+          Nike names and imagery are used in an unaffiliated synthetic simulation. All metrics are derived from this selected run.
+        </footer>
+      </body>
     </html>
   );
 }

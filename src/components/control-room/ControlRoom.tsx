@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CATEGORY_LABEL, fixed, money, moneyCompact, num, pct, shortDate, shortTime, virtualDate } from "@/lib/format";
 import { Chart } from "@/components/control-room/charts";
+import { NormalLogo } from "@/components/normal/NormalLogo";
 import type { Breakdown, LedgerEvent, RunsResponse, StateResponse } from "@/components/control-room/types";
 
 const SCENARIOS = ["healthy", "ad_fatigue", "delivery_delays", "viral_demand", "negative_reviews", "promo_checkout_failure"] as const;
@@ -140,15 +141,9 @@ export function ControlRoom() {
 
   return (
     <>
-      <div className="notice">
-        <div className="shell">
-          <strong>Nike — Unaffiliated Simulation.</strong>
-          <span>Operator console for the synthetic Nike digital twin. Every number here is computed from persisted canonical events; nothing is a fact about the real company.</span>
-        </div>
-      </div>
       <header className="topbar">
         <div className="shell topbar-inner">
-          <Link href="/" className="brand">Normal <small>· Business control room</small></Link>
+          <Link href="/" className="brand normal-legacy-brand"><NormalLogo /><small>· Business control room</small></Link>
           <div className="row">
             <Link href="/dev/monitor" className="btn sm">Anomaly monitor</Link>
             <Link href="/demo-store" className="btn sm">Open demo store</Link>

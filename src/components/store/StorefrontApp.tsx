@@ -6,6 +6,7 @@ import { CATEGORY_LABEL, money, shortDate, virtualDate } from "@/lib/format";
 import { ProductCard } from "@/components/store/ProductCard";
 import { ProductDrawer } from "@/components/store/ProductDrawer";
 import { CartDrawer } from "@/components/store/CartDrawer";
+import { NormalLogo } from "@/components/normal/NormalLogo";
 import type { CartLine, StoreCatalogue, StoreOrder, StoreProduct } from "@/components/store/types";
 
 const CART_KEY = "normal.demo-store.cart.v1";
@@ -116,15 +117,9 @@ export function StorefrontApp() {
 
   return (
     <>
-      <div className="notice">
-        <div className="shell">
-          <strong>Nike — Unaffiliated Simulation.</strong>
-          <span>No real purchases. Product names and list prices are public references from nike.com/gb; stock, orders and shipping are synthetic.</span>
-        </div>
-      </div>
       <header className="topbar">
         <div className="shell topbar-inner">
-          <Link href="/" className="brand">Normal <small>· Demo store</small></Link>
+          <Link href="/" className="brand normal-legacy-brand"><NormalLogo /><small>· Demo store</small></Link>
           <div className="row">
             {catalogue?.virtualTime ? <span className="pill" title="Simulated clock of the active run">Virtual time · {virtualDate(catalogue.virtualTime)}</span> : null}
             <button className="btn cart-btn" onClick={() => setCartOpen(true)} aria-label={`Open cart, ${cartCount} items`}>
@@ -182,7 +177,7 @@ export function StorefrontApp() {
         ) : null}
 
         <footer className="muted small" style={{ padding: "24px 0 48px" }}>
-          Catalogue served from {catalogue?.servedFrom ?? "…"}. Reference prices observed on nike.com/gb on {catalogue?.products[0]?.reference ? shortDate(catalogue.products[0].reference.retrievedAt) : "—"} and may since have changed. This demo is not affiliated with, endorsed by or connected to Nike, Inc.
+          Catalogue served from {catalogue?.servedFrom ?? "…"}. Reference prices observed on nike.com/gb on {catalogue?.products[0]?.reference ? shortDate(catalogue.products[0].reference.retrievedAt) : "—"} and may since have changed.
         </footer>
       </main>
 

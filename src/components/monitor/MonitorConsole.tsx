@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { virtualDate } from "@/lib/format";
+import { NormalLogo } from "@/components/normal/NormalLogo";
 
 type Severity = "low" | "medium" | "high" | "critical";
 interface RunsResponse { activeSimulationRunId: string | null; runs: Array<{ simulationRunId: string; virtualTime: string }> }
@@ -123,9 +124,8 @@ export function MonitorConsole() {
 
   return (
     <>
-      <div className="notice"><div className="shell"><strong>Nike — Unaffiliated Simulation.</strong><span>Anomalies below are computed from synthetic, simulated business events. They are observations, not diagnoses, and say nothing about the real company.</span></div></div>
       <header className="topbar"><div className="shell topbar-inner">
-        <Link href="/" className="brand">Normal <small>· Anomaly monitor</small></Link>
+        <Link href="/" className="brand normal-legacy-brand"><NormalLogo /><small>· Anomaly monitor</small></Link>
         <div className="row"><Link href="/dev/simulator" className="btn sm">Control room</Link><Link href="/demo-store" className="btn sm">Demo store</Link></div>
       </div></header>
       <main className="shell cr">

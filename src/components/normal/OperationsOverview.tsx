@@ -1,17 +1,126 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { money, num, pct, virtualDate } from "@/lib/format";
-import { api, q, sevClass, statusClass, type AnomalyRow, type Capabilities, type IncidentRow, type InvestigationRow, type MonitorStatus } from "./api";
+import { money, moneyCompact, num, virtualDate } from "@/lib/format";
+import { api, q, type AnomalyRow, type IncidentRow, type InvestigationRow, type MonitorStatus } from "./api";
 import { useRun } from "./run-context";
+import { NormalLogo } from "./NormalLogo";
 
-interface RunState { run: { simulationRunId: string; seed: number; status: string; virtualTime: string }; tickIndex: number; totals?: Record<string, number>; locked: boolean; isActiveRun: boolean }
-interface Breakdown { window: { startAt: string; endAt: string }; total: { counters: Record<string, number>; rates: Record<string, number | null>; window: { startAt: string; endAt: string } } | null; daily: unknown[] }
-interface Data { state: RunState; breakdown: Breakdown; monitor: MonitorStatus; incidents: IncidentRow[]; anomalies: { total: number; items: AnomalyRow[] }; investigations: { total: number; items: InvestigationRow[] }; capabilities: Capabilities }
+interface Campaign {
+  campaignId: string; name: string; platform: string;
+  status: string; targetCategory: string; dailyBudgetMinor: number;
+  totals: { impressions: number; clicks: number; spendMinor: number; sessions: number; attributedOrders: number; attributedRevenueMinor: number };
+}
+interface RunState {
+  run: { simulationRunId: string; seed: number; status: string; virtualTime: string; activeScenario: string; scenarioSeverity: number };
+  tickIndex: number; totals?: Record<string, number>; locked: boolean; isActiveRun: boolean; campaigns: Campaign[];
+}
+interface Snapshot {
+  window: { startAt: string; endAt: string };
+  counters: { revenueMinor: number; orders: number; sessions: number; adSpendMinor: number; delayedShipments: number; shipments: number; reviews: number; lowRatingReviews: number };
+  rates: { conversionRate: number | null; ctr: number | null; lateDeliveryRate: number | null; lowRatingRate: number | null; costPerAcquisitionMinor: number | null };
+}
+interface CampaignMetric { campaignId: string; impressions: number; clicks: number; spendMinor: number; attributedOrders: number; attributedRevenueMinor: number; ctr: number | null; costPerAcquisitionMinor: number | null; roas: number | null; averageFrequency: number | null }
+interface Breakdown { window: { startAt: string; endAt: string }; total: Snapshot | null; daily: Snapshot[]; campaigns: CampaignMetric[] }
+interface Data { state: RunState; breakdown: Breakdown; monitor: MonitorStatus; incidents: IncidentRow[]; anomalies: { total: number; items: AnomalyRow[] }; investigations: { total: number; items: InvestigationRow[] } }
+interface Signal { id: string; title: string; detail: string; level: "high" | "medium"; evidence: string; href?: string; testId?: string }
+
+function Trend({ direction, color = "green", size = 16 }: { direction: "up" | "down" | "flat"; color?: "green" | "red"; size?: number }) {
+  if (direction === "flat") return null;
+  const file = color === "green" ? "be5fa.svg" : "eb6cd.svg";
+  return <Image className={`trend${direction === "down" ? " down" : ""}`} style={{ width: size, height: size }} src={`/assets/${file}`} width={size} height={size} alt="" />;
+}
+
+function Gauge({ score }: { score: number | null }) {
+  const angle = score === null ? -90 : (Math.max(0, Math.min(100, score)) / 100) * 180 - 90;
+  return (
+    <div className={`gauge${score === null ? " empty" : ""}`}>
+      <svg viewBox="0 0 419 225" role="img" aria-label={score === null ? "No active incident risk score" : `Highest active incident severity ${score} out of 100`}>
+        <path d="M12 209.5C5.37258 209.5 -0.0358813 204.123 0.337603 197.506C3.66601 138.538 31.3821 86.0897 73.5604 50.0875C110.15 18.8557 157.623 0 209.5 0C261.377 0 308.85 18.8557 345.44 50.0875C387.618 86.0897 415.334 138.538 418.662 197.506C419.036 204.123 413.627 209.5 407 209.5H209.5H12Z" fill="#60CA27" />
+        <path d="M407 209.5H209.5L73.5604 50.0875C110.15 18.8557 157.623 0 209.5 0C261.377 0 308.85 18.8557 345.44 50.0875C387.618 86.0897 415.334 138.538 418.662 197.506C419.036 204.123 413.627 209.5 407 209.5Z" fill="#FFC44D" />
+        <path d="M407 209.5H209.5L345.44 50.0874C387.618 86.0897 415.334 138.538 418.662 197.506C419.036 204.123 413.627 209.5 407 209.5Z" fill="#EF4545" />
+        <g transform={`rotate(${angle} 209.5 201.85)`}><path d="M 199 201.85 L 207 131 C 207.8 127.5 211.2 127.5 212 131 L 220 201.85 Z" fill="#000" stroke="#000" strokeWidth="1" strokeLinejoin="round" strokeLinecap="round" /></g>
+        <circle cx="209.5" cy="201.85" r="22.95" fill="#000" />
+      </svg>
+      <strong>{score ?? "—"}</strong>
+    </div>
+  );
+}
+
+function SignalRow({ signal, withRun }: { signal: Signal; withRun: (href: string) => string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="signal-item" data-testid={signal.testId}>
+      <div className="signal-row">
+        <Trend direction="down" color={signal.level === "high" ? "red" : "green"} size={20} />
+        <div className="signal-text"><span className="signal-title">{signal.title}</span><span className="signal-detail">{signal.detail}</span></div>
+        {signal.href ? <Link className="investigate" href={withRun(signal.href)}>View investigation</Link> : <span className="signal-observation">Observed</span>}
+        <button className="help" aria-expanded={open} aria-controls={`signal-evidence-${signal.id}`} aria-label={`${open ? "Hide" : "Show"} details for ${signal.title}`} onClick={() => setOpen((value) => !value)}>?</button>
+      </div>
+      {open ? <p className="evidence" id={`signal-evidence-${signal.id}`} role="note">{signal.evidence}</p> : null}
+    </li>
+  );
+}
+
+function CampaignCarousel({ campaigns, metrics, withRun }: { campaigns: Campaign[]; metrics: CampaignMetric[]; withRun: (href: string) => string }) {
+  const [activeCampaign, setActiveCampaign] = useState(0);
+  if (campaigns.length === 0) return <article className="card campaign-card" data-testid="campaign-carousel"><div className="campaign-head"><h2>Current Campaigns</h2></div><div className="campaign-empty">No campaign records exist in this run.</div></article>;
+  const visibleCampaigns = campaigns.slice(0, 3);
+  const changeCampaign = (step: number) => setActiveCampaign((current) => (current + step + visibleCampaigns.length) % visibleCampaigns.length);
+  const index = Math.min(activeCampaign, visibleCampaigns.length - 1);
+  const images = ["nike-run-city.jpg", "nike-run-motion.jpg", "nike-run-street.jpg"];
+  return (
+    <article className="card campaign-card" aria-roledescription="carousel" aria-label="Current Campaigns" data-testid="campaign-carousel">
+      <div className="campaign-head"><h2>Current Campaigns</h2><span className="campaign-run-count">{campaigns.filter((campaign) => campaign.status === "active").length} active · {campaigns.filter((campaign) => campaign.status !== "active").length} paused</span>
+        <div className="campaign-controls"><span>{index + 1} / {visibleCampaigns.length}</span><button onClick={() => changeCampaign(-1)} aria-label="Previous campaign"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.5 4.5-5 5.5 5 5.5" /></svg></button><button onClick={() => changeCampaign(1)} aria-label="Next campaign"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.5 5 5.5-5 5.5" /></svg></button></div>
+      </div>
+      <div className="campaign-track">{visibleCampaigns.map((campaign, campaignIndex) => {
+        const metric = metrics.find((item) => item.campaignId === campaign.campaignId);
+        const targetCategory = campaign.targetCategory || "All categories";
+        const platformLabel = campaign.platform === "meta_ads" ? "Meta" : campaign.platform === "google_ads" ? "Google" : "Ads";
+        return <Link className={`campaign-slide${campaignIndex === index ? " active" : ""}`} key={campaign.campaignId} href={withRun(`/dashboard/campaigns/${encodeURIComponent(campaign.campaignId)}`)} aria-label={`Open ${campaign.name || campaign.campaignId} in the campaign dashboard`} onMouseEnter={() => setActiveCampaign(campaignIndex)}>
+          <Image src={`/assets/${images[campaignIndex]}`} alt="" fill sizes="(max-width: 650px) 82vw, (max-width: 880px) 90vw, 40vw" />
+          <span className="campaign-shade" />
+          <span className="campaign-status">{campaign.status === "active" ? "Live" : "Paused"}</span>
+          <span className="campaign-copy"><small>{platformLabel} · {targetCategory}</small><strong>{campaign.name || campaign.campaignId}</strong><span className="campaign-facts"><span>Budget {money(campaign.dailyBudgetMinor)}/day</span>{metric ? <><span>30d spend {money(metric.spendMinor)}</span><span>{num(metric.attributedOrders)} attributed orders</span></> : <span>No delivery data yet</span>}</span></span>
+          <span className="campaign-open-label">Open campaign →</span>
+        </Link>;
+      })}</div>
+    </article>
+  );
+}
+
+function RevenueTrend({ daily, total }: { daily: Snapshot[]; total: Snapshot | null }) {
+  const [period, setPeriod] = useState<"Days" | "Week" | "Month">("Month");
+  const sorted = [...daily].sort((a, b) => a.window.startAt.localeCompare(b.window.startAt));
+  const count = period === "Days" ? 1 : period === "Week" ? 7 : 30;
+  const series = sorted.slice(-count);
+  const revenue = series.length ? series.reduce((sum, item) => sum + item.counters.revenueMinor, 0) : total?.counters.revenueMinor ?? 0;
+  const previousSeries = sorted.slice(-count * 2, -count);
+  const previous = previousSeries.reduce((sum, item) => sum + item.counters.revenueMinor, 0);
+  const change = previousSeries.length === count && previous > 0 ? ((revenue - previous) / previous) * 100 : null;
+  const max = Math.max(0, ...series.map((item) => item.counters.revenueMinor));
+  const rawStep = max > 0 ? max / 4 : 100;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalizedStep = rawStep / magnitude;
+  const niceFactor = normalizedStep <= 1 ? 1 : normalizedStep <= 2 ? 2 : normalizedStep <= 2.5 ? 2.5 : normalizedStep <= 5 ? 5 : 10;
+  const step = niceFactor * magnitude;
+  const axisMax = Math.max(step, Math.ceil(max / step) * step);
+  const axisTicks = [4, 3, 2, 1, 0].map((part) => axisMax * part / 4);
+  return (
+    <article className="card revenue-card" data-testid="revenue-trend">
+      <div className="card-heading"><h2>Revenue Trend</h2><div className="periods">{(["Days", "Week", "Month"] as const).map((item) => <button key={item} className={period === item ? "selected" : ""} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
+      <div className="revenue-total"><small className="eyebrow">Revenue · Selected period</small><div className="revenue-line"><strong>{money(revenue)}</strong>{change !== null ? <span>{change >= 0 ? "+" : ""}{change.toFixed(1)}% <Trend direction={change >= 0 ? "up" : "down"} /></span> : null}</div><p>{change !== null ? "Compared with the previous full period" : `${series.length} persisted daily snapshots · previous full period unavailable`}</p></div>
+      {series.length ? <div className="chart" role="img" aria-label={`${period} revenue from persisted daily snapshots, vertical scale from zero to ${money(axisMax)}`}><div className="axis">{axisTicks.map((tick) => <span key={tick}>{moneyCompact(tick)}</span>)}</div><div className="bars">{series.map((item, index) => <div className="bar-slot" key={item.window.startAt} title={`${virtualDate(item.window.startAt)}: ${money(item.counters.revenueMinor)}`}><div className="bar-plot"><div className="bar" style={{ height: `${item.counters.revenueMinor > 0 ? Math.max(1, item.counters.revenueMinor / axisMax * 100) : 0}%`, background: ["#5b8a42", "#84c263", "#668356", "#a5df86"][index % 4] }} /></div><span>{new Date(item.window.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span></div>)}</div></div> : <div className="campaign-empty">No daily metric snapshots are available for this run yet.</div>}
+    </article>
+  );
+}
 
 export function OperationsOverview() {
   const { runId, withRun, loaded } = useRun();
+  const [riskOpen, setRiskOpen] = useState(false);
   const [result, setResult] = useState<{ runId: string; data: Data | null; error: string | null } | null>(null);
   const selected = useRef<string | null>(null);
   const requestSequence = useRef(0);
@@ -20,102 +129,85 @@ export function OperationsOverview() {
     const sequence = ++requestSequence.current;
     try {
       const run = q({ simulationRunId: id });
-      const [state, breakdown, monitor, incidents, anomalies, investigations, capabilities] = await Promise.all([
-        api<RunState>(`/api/dev/simulator/state?${run}`), api<Breakdown>(`/api/metrics/breakdown?${run}&days=7`), api<MonitorStatus>(`/api/dev/monitor/run?${run}`),
+      const [state, breakdown, monitor, incidents, anomalies, investigations] = await Promise.all([
+        api<RunState>(`/api/dev/simulator/state?${run}`), api<Breakdown>(`/api/metrics/breakdown?${run}&days=30`), api<MonitorStatus>(`/api/dev/monitor/run?${run}`),
         api<{ items: IncidentRow[] }>(`/api/incidents?${run}&limit=10`), api<{ total: number; items: AnomalyRow[] }>(`/api/anomalies?${run}&limit=8`),
-        api<{ total: number; items: InvestigationRow[] }>(`/api/investigations?${run}&limit=8`), api<Capabilities>(`/api/intelligence/capabilities?${run}`),
+        api<{ total: number; items: InvestigationRow[] }>(`/api/investigations?${run}&limit=8`),
       ]);
       if (selected.current !== id || requestSequence.current !== sequence) return;
-      setResult({ runId: id, data: { state, breakdown, monitor, incidents: incidents.items, anomalies, investigations, capabilities }, error: null });
+      setResult({ runId: id, data: { state, breakdown, monitor, incidents: incidents.items, anomalies, investigations }, error: null });
     } catch (e) { if (selected.current === id && requestSequence.current === sequence) setResult({ runId: id, data: null, error: (e as Error).message }); }
   }, []);
   useLayoutEffect(() => { selected.current = runId; requestSequence.current++; }, [runId]);
   useEffect(() => { if (!runId) return; void (async () => { await load(runId); })(); }, [runId, load]);
-  useEffect(() => { if (!runId) return; const t = setInterval(() => void load(runId), 10_000); return () => clearInterval(t); }, [runId, load]);
+  useEffect(() => { if (!runId) return; const timer = setInterval(() => void load(runId), 10_000); return () => clearInterval(timer); }, [runId, load]);
 
   if (loaded && !runId) return <div className="empty" data-testid="overview-empty">No simulation runs exist yet. Create one in the <Link href="/dev/simulator">control room</Link>.</div>;
   const current = result && result.runId === runId ? result : null;
   if (current?.error) return <div className="alert error" data-testid="overview-error">{current.error}</div>;
   if (!current?.data) return <div className="muted" data-testid="overview-loading">Loading run data…</div>;
-  const { state, breakdown, monitor, incidents, anomalies, investigations, capabilities } = current.data;
+
+  const { state, breakdown, monitor, incidents, anomalies, investigations } = current.data;
   const total = breakdown.total;
-  const activeIncidents = incidents.filter((i) => i.status === "monitoring" || i.status === "investigating");
-  const stage = (id: string) => capabilities.stages.find((s) => s.id === id)!;
+  const activeIncidents = incidents.filter((incident) => incident.status === "monitoring" || incident.status === "investigating");
+  const riskScore = activeIncidents.length ? Math.max(...activeIncidents.map((incident) => incident.severity.score)) : null;
+  const sortedDaily = [...(breakdown.daily ?? [])].sort((a, b) => a.window.startAt.localeCompare(b.window.startAt));
+  const latest = sortedDaily.at(-1) ?? null;
+  const previous = sortedDaily.at(-2) ?? null;
+  const trendFor = (current: number | null | undefined, before: number | null | undefined): "up" | "down" | "flat" => current == null || before == null || before === 0 ? "flat" : current > before ? "up" : current < before ? "down" : "flat";
+  const signalRows: Signal[] = [
+    ...incidents.map((incident) => ({ id: incident.incidentId, title: incident.title, detail: `${incident.severity.level} impact · score ${incident.severity.score} · ${incident.status.replaceAll("_", " ")}`, level: incident.severity.level === "critical" || incident.severity.level === "high" ? "high" as const : "medium" as const, evidence: `${incident.summary} This incident is a persisted observation, not a diagnosis.`, ...(incident.investigationId ? { href: `/dashboard/investigations/${encodeURIComponent(incident.investigationId)}` } : {}), testId: "overview-incident" })),
+    ...anomalies.items.map(({ anomaly, finding }) => ({ id: anomaly.anomalyId, title: finding?.label ?? anomaly.metric.replaceAll("_", " "), detail: `${anomaly.severity} · ${anomaly.changePercent > 0 ? "+" : ""}${anomaly.changePercent.toFixed(1)}% vs baseline`, level: anomaly.severity === "critical" || anomaly.severity === "high" ? "high" as const : "medium" as const, evidence: `Observed ${anomaly.actualValue.toFixed(2)} against baseline ${anomaly.baselineValue.toFixed(2)} in the detected window. This is an anomaly observation, not a diagnosis.`, testId: "overview-anomaly-signal" })),
+  ];
+  const activity = [
+    { title: "Monitoring completed", detail: monitor.lastAsOf ? `Business metrics evaluated through ${virtualDate(monitor.lastAsOf)}` : "No completed monitoring scan recorded for this run." },
+    { title: "Anomalies detected", detail: `${anomalies.total} signals grouped into ${incidents.length} persisted incidents` },
+    { title: "Evidence available", detail: `${investigations.total} investigations · ${investigations.items.reduce((count, item) => count + item.investigation.evidenceIds.length, 0)} evidence links` },
+    { title: "AI diagnosis", detail: "Awaiting Mubit integration" },
+  ];
+
   return (
-    <>
-      <div className="card" data-testid="overview-run">
-        <div className="card-head"><h3>Run</h3><span>{state.isActiveRun ? "storefront active run" : "not the storefront run"}</span></div>
-        <div className="card-body row" style={{ flexWrap: "wrap", gap: 10 }}>
-          <span className="pill">run <code>{state.run.simulationRunId}</code></span><span className="pill">seed {state.run.seed}</span><span className="pill">tick {state.tickIndex}</span>
-          <span className="pill accent" data-testid="overview-virtual-time">virtual {virtualDate(state.run.virtualTime)}</span>
-          <span className={`pill ${state.locked ? "warn" : "ok"}`}>{state.locked ? "tick in progress" : "simulator idle"}</span>
-          <Link href="/dev/simulator" className="btn sm">Open control room</Link>
-        </div>
-      </div>
+    <div className="normal-overview" data-testid="normal-overview">
+      <div className="layout normal-overview-grid">
+        <section className="left-column top-column">
+          <article className="card risk-card" data-testid="overview-run">
+            <div className="risk-head"><h2>Operational Risk</h2><span className="period">Selected period: Month</span></div>
+            <button className="gauge-btn" onClick={() => setRiskOpen(true)} aria-label={riskScore === null ? "Show risk details" : `Show why the risk score is ${riskScore}`}><Gauge score={riskScore} /></button>
+            <div className="risk-labels"><span>Low</span><span>High</span></div>
+            <p>Calculated from persisted business anomalies, not an arbitrary score.</p>
+            {riskOpen ? <div className="risk-panel" role="dialog" aria-label="Risk score breakdown"><div className="risk-head"><h2>{riskScore === null ? "No active risk" : `Why ${riskScore}?`}</h2><button className="close" onClick={() => setRiskOpen(false)} aria-label="Close">×</button></div><p className="panel-note">The score reflects the highest active incident severity recorded for run {state.run.simulationRunId}.</p><ul>{activeIncidents.slice(0, 5).map((incident) => <li key={incident.incidentId}><span className={`dot ${incident.severity.level === "high" || incident.severity.level === "critical" ? "high" : "medium"}`} />{incident.title}<em>{incident.severity.level} impact</em></li>)}</ul><p className="panel-note">No active incident means no risk score is displayed.</p></div> : null}
+          </article>
+        </section>
 
-      <div className="grid kpis" data-testid="overview-kpis">
-        <div className="card kpi"><span className="label">Net revenue (7 virtual days)</span><span className="value">{total ? money(total.counters.revenueMinor) : "—"}</span><span className="sub">{total ? `${num(total.counters.orders)} orders · refunds ${money(total.counters.refundMinor)}` : "no metrics yet"}</span></div>
-        <div className="card kpi"><span className="label">Sessions</span><span className="value">{total ? num(total.counters.sessions) : "—"}</span><span className="sub">conversion {total ? pct(total.rates.conversionRate, 2) : "—"}</span></div>
-        <div className="card kpi"><span className="label">Advertising</span><span className="value">{total ? money(total.counters.adSpendMinor) : "—"}</span><span className="sub">CTR {total ? pct(total.rates.ctr, 2) : "—"} · CPA {total?.rates.costPerAcquisitionMinor != null ? money(total.rates.costPerAcquisitionMinor) : "—"}</span></div>
-        <div className="card kpi"><span className="label">Fulfilment</span><span className="value">{total ? pct(total.rates.lateDeliveryRate) : "—"}</span><span className="sub">late · {total ? `${num(total.counters.delayedShipments)} of ${num(total.counters.shipments)} promises due` : "—"}</span></div>
-        <div className="card kpi"><span className="label">Reviews</span><span className="value">{total ? pct(total.rates.lowRatingRate) : "—"}</span><span className="sub">low-rating share · {total ? `${num(total.counters.reviews)} reviews` : "—"}</span></div>
-        <div className="card kpi"><span className="label">Latest metric snapshot</span><span className="value" style={{ fontSize: 16 }}>{total ? virtualDate(total.window.endAt) : "—"}</span><span className="sub">window {total ? `${virtualDate(total.window.startAt)} →` : "—"}</span></div>
-      </div>
+        <section className="right-column top-column">
+          <article className="card signals-card top-signals-card" data-testid="overview-signals">
+            <div className="signals-head"><h2>Signals</h2><div className="signals-actions"><span className="attention">{anomalies.total} alerts</span><Link href={withRun("/dashboard/signals")} className="signals-more">View all</Link></div></div>
+            {signalRows.length ? <ul className="signal-list">{signalRows.slice(0, 3).map((signal) => <SignalRow key={signal.id} signal={signal} withRun={withRun} />)}</ul> : <p className="panel-note">No incident or anomaly signals are recorded for this run.</p>}
+          </article>
+        </section>
 
-      <div className="grid two">
-        <div className="card" data-testid="overview-monitoring">
-          <div className="card-head"><h3>Monitoring</h3><Link href="/dev/monitor" className="btn sm">Open anomaly monitor</Link></div>
-          <div className="card-body" style={{ display: "grid", gap: 6 }}>
-            <span className="small">Direct trigger: <strong>{monitor.methodA?.enabled ? "enabled" : "disabled"}</strong> · Change Stream worker: <span className={`pill ${monitor.worker?.connected ? "ok" : "warn"}`} data-testid="overview-worker">{monitor.worker?.connected ? "connected (recent heartbeat)" : "no current connection confirmed"}</span></span>
-            <span className="small">Analysed up to <strong>{virtualDate(monitor.lastAsOf)}</strong> · latest observed hour {virtualDate(monitor.watermark)} · last scan {monitor.lastScanAt ? new Date(monitor.lastScanAt).toLocaleString("en-GB") : "never"}</span>
-            <span className="small">Jobs: {monitor.jobs?.pending ?? 0} pending · {monitor.jobs?.running ?? 0} running · {monitor.jobs?.completed ?? 0} completed · {monitor.jobs?.failed ?? 0} failed</span>
-            <span className="small">Metrics persisted: {num(Number(stage("observe").metrics.snapshots ?? 0))} snapshots over {num(Number(stage("observe").metrics.events ?? 0))} events</span>
-            {monitor.failedJobs?.map((j) => <div key={j.jobKey} className="alert error">Attempt {j.attempts}: {j.lastError}</div>)}
-          </div>
-        </div>
-        <div className="card" data-testid="overview-pipeline">
-          <div className="card-head"><h3>Pipeline readiness</h3><Link href={withRun("/dashboard/architecture")} className="btn sm">Open architecture</Link></div>
-          <div className="card-body" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {capabilities.stages.map((s) => <Link key={s.id} href={withRun(`/dashboard/architecture?stage=${s.id}`)} className={`pill ${statusClass(s.status)}`} title={s.summary}>{s.name}: {s.status.replaceAll("_", " ")}</Link>)}
-          </div>
-        </div>
-      </div>
+        <CampaignCarousel campaigns={state.campaigns ?? []} metrics={breakdown.campaigns ?? []} withRun={withRun} />
 
-      <div className="card" data-testid="overview-incidents">
-        <div className="card-head"><h3>Incidents</h3><span>{activeIncidents.length} active · {incidents.length} shown</span></div>
-        <div className="card-body" style={{ display: "grid", gap: 8 }}>
-          {incidents.length === 0 ? <div className="muted small">No incidents for this run.</div> : null}
-          {incidents.map((i) => (
-            <div key={i.incidentId} className="order" data-testid="overview-incident">
-              <div className="row" style={{ justifyContent: "space-between" }}><strong>{i.title}</strong><div className="row"><span className={`pill ${sevClass(i.severity.level)}`}>{i.severity.level} · {i.severity.score}</span><span className="pill">{i.status}</span></div></div>
-              <span className="small">{i.findingIds.length} findings · {i.anomalyIds.length} anomalies · since {virtualDate(i.onsetAt)}</span>
-              {i.investigationId ? <Link className="btn sm" style={{ justifySelf: "start" }} href={withRun(`/dashboard/investigations/${encodeURIComponent(i.investigationId)}`)} data-testid="open-investigation">Open investigation workspace</Link> : <span className="muted small">No investigation opened.</span>}
-            </div>
-          ))}
-        </div>
-      </div>
+        <section className="left-column bottom-column"><RevenueTrend daily={breakdown.daily ?? []} total={total} /></section>
 
-      <div className="grid two">
-        <div className="card" data-testid="overview-anomalies">
-          <div className="card-head"><h3>Recent anomalies</h3><span>{anomalies.total} canonical</span></div>
-          <div className="card-body scroll-x">
-            {anomalies.items.length === 0 ? <div className="muted small">No anomalies recorded.</div> : (
-              <table><thead><tr><th>Metric</th><th>Segment</th><th className="num">Change</th><th>Severity</th><th>Detected</th></tr></thead>
-                <tbody>{anomalies.items.map((a) => <tr key={a.anomaly.anomalyId}><td>{a.finding?.label ?? a.anomaly.metric}</td><td>{a.finding?.segmentLabel ?? "—"}</td><td className="num">{a.anomaly.changePercent > 0 ? "+" : ""}{a.anomaly.changePercent.toFixed(1)}%</td><td><span className={`pill ${sevClass(a.anomaly.severity)}`}>{a.anomaly.severity}</span></td><td>{virtualDate(a.anomaly.detectedAt)}</td></tr>)}</tbody></table>
-            )}
-          </div>
-        </div>
-        <div className="card" data-testid="overview-investigations">
-          <div className="card-head"><h3>Recent investigations</h3><span>{investigations.total} total</span></div>
-          <div className="card-body scroll-x">
-            {investigations.items.length === 0 ? <div className="muted small">No investigations opened for this run.</div> : (
-              <table><thead><tr><th>Title</th><th>Status</th><th className="num">Anomalies</th><th className="num">Evidence</th><th></th></tr></thead>
-                <tbody>{investigations.items.map((i) => <tr key={i.investigation.investigationId}><td>{i.investigation.title}<div className="muted small"><code>{i.investigation.investigationId}</code></div></td><td><span className="pill">{i.investigation.status.replaceAll("_", " ")}</span></td><td className="num">{i.investigation.anomalyIds.length}</td><td className="num">{i.investigation.evidenceIds.length}</td><td><Link className="btn sm" href={withRun(`/dashboard/investigations/${encodeURIComponent(i.investigation.investigationId)}`)}>Open</Link></td></tr>)}</tbody></table>
-            )}
-          </div>
-        </div>
+        <section className="right-column bottom-column">
+          <article className="card metric-card" data-testid="overview-kpis" id="metrics">
+            {[
+              { label: "Revenue", value: total ? moneyCompact(total.counters.revenueMinor) : "—", direction: trendFor(latest?.counters.revenueMinor, previous?.counters.revenueMinor) },
+              { label: "Sessions", value: total ? num(total.counters.sessions) : "—", direction: trendFor(latest?.counters.sessions, previous?.counters.sessions) },
+              { label: "Orders", value: total ? num(total.counters.orders) : "—", direction: trendFor(latest?.counters.orders, previous?.counters.orders) },
+              { label: "AdSpend", value: total ? moneyCompact(total.counters.adSpendMinor) : "—", direction: trendFor(latest?.counters.adSpendMinor, previous?.counters.adSpendMinor) },
+            ].map((item) => <div className="metric" key={item.label}><span>{item.label}</span><div><strong>{item.value}</strong><Trend direction={item.direction} color={item.direction === "down" ? "red" : "green"} size={15} /></div></div>)}
+          </article>
+
+          <article className="card activity-card" data-testid="overview-activity" id="activity">
+            <div className="activity-head"><h2>Normal Activity</h2><span>{activity.length} updates</span></div>
+            <ol>{activity.map((item) => <li key={item.title}><strong>{item.title}</strong><span>{item.detail}</span></li>)}</ol>
+            <div className="activity-logo"><NormalLogo compact /></div>
+          </article>
+        </section>
+
       </div>
-      <div className="row"><Link href="/demo-store" className="btn sm">Demo store</Link><Link href="/dev/simulator" className="btn sm">Nike simulator</Link><Link href="/dev/monitor" className="btn sm">Monitoring console</Link></div>
-    </>
+    </div>
   );
 }

@@ -75,6 +75,22 @@ export async function listAnomalies(input: unknown, dbOverride?: Db) {
   return { total, limit: q.limit, offset: q.offset, items };
 }
 
+/** Canonical signal detail plus the exact metric snapshots and finding record used by its detector. */
+export async function getAnomalyBundle(anomalyId: string, dbOverride?: Db, input: unknown = {}) {
+  const scope = z.object({ businessId: BusinessId, simulationRunId: RunId.optional() }).strict().parse(input);
+  const db = dbOverride ?? (await getDb());
+  const raw = await db.collection(COLLECTIONS.anomalies).findOne({ anomalyId, businessId: scope.businessId,
+    ...(scope.simulationRunId ? { simulationRunId: scope.simulationRunId } : {}) }, { projection: { _id: 0 } });
+  if (!raw) return null;
+  const simulationRunId = raw.simulationRunId as string;
+  const anomaly = canonicalAnomaly(raw);
+  const [snapshots, finding] = await Promise.all([
+    db.collection(COLLECTIONS.metricSnapshots).find({ businessId: scope.businessId, simulationRunId, snapshotId: { $in: anomaly.sourceSnapshotIds } }, { projection: { _id: 0 } }).toArray(),
+    db.collection<FindingDoc>(COLLECTIONS.detectionFindings).findOne({ businessId: scope.businessId, simulationRunId, anomalyId }, { projection: { _id: 0, findingId: 1, signalId: 1, label: 1, theme: 1, segment: 1, segmentLabel: 1, reason: 1, evaluation: 1, evidence: 1 } }),
+  ]);
+  return { anomaly, simulationRunId, snapshots: snapshots.map(canonicalSnapshot).sort((a, b) => a.window.startAt.localeCompare(b.window.startAt)), finding };
+}
+
 export async function listInvestigations(input: unknown, dbOverride?: Db) {
   const q = InvestigationQuery.parse(input);
   const db = dbOverride ?? (await getDb());
