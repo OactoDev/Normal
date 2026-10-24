@@ -1,55 +1,73 @@
-# Policy Challenge entry — drafts
+# Policy Challenge entry — ready-to-post drafts
 
-**Deadline: Sat 24 Oct, 14:00 BST.** Post on X and LinkedIn first, then in `#side-quests`.
+**Deadline: Sat 24 Oct 2026, 14:00 BST.** Post on X and LinkedIn, then put both post links in `#side-quests`. These are drafts; publishing remains with Efi.
 
-Attach: `blocked-violation.jpg` (main image) and `supported.jpg`. A 60–90 s screen recording of the two runs is better if there's time (see "Demo run" below).
+**Attach the video:** `Normal_Sapling_Quest.mp4` in this folder. The demo uses Efi's ElevenLabs voice and face, live supported/blocked runs, and four real Sapling stress checks. Final verification: `verification/video-report.json`.
 
-Before posting: commit and push the Sapling work so the repo link shows it, and make sure the repo is public.
-
----
+**Repo:** https://github.com/OactoDev/Normal/tree/sapling-quest
 
 ## X (tag @MubitLabs)
 
-> An AI says "delivery delays", so Normal's agents cut ad spend and email customers.
+> An AI can cut your ad budget. But did it get the diagnosis right?
 >
-> First, @MubitLabs Banyan Sapling checks that diagnosis against the shop's policy and evidence.
+> Normal checks first with @MubitLabs Banyan Sapling.
 >
-> 8 late orders vs a 10-order rule → violation (99%). Plan blocked before money moves.
+> 4 live checks: supported, violation, missing evidence, contradictions. 8 late orders vs a 10-order rule? Plan blocked.
+>
+> Watch the demo ↓
 
-(Repo link as a reply, to stay under 280 characters.)
+Attach the MP4. Put the repo link in a reply:
+
+> Code + reusable demo pipeline: https://github.com/OactoDev/Normal/tree/sapling-quest
 
 ## LinkedIn (tag Mubit)
 
-> At the Night Shift hackathon we built Normal: AI agents that run e-commerce ops. When revenue drops, Normal diagnoses why, then marketing, customer care and storefront agents act on it: cutting ad budgets, emailing customers, changing the shop.
+> What happens when an AI stops giving advice and starts spending your money?
 >
-> The risk: everything downstream trusts the diagnosis. If the AI says "delivery delays" on thin evidence, real money moves for the wrong reason.
+> At the Night Shift hackathon, we built Normal: AI agents that run e-commerce operations. When sales drop, Normal diagnoses why, then builds a recovery plan for marketing, customer care and the storefront.
 >
-> So before any plan is generated, Mubit's Banyan Sapling checks the diagnosis against the merchant's own policy and the evidence it cites:
+> Every action trusts that diagnosis. So before a plan is generated, Mubit's Banyan Sapling checks three things: the merchant's own policy, the evidence the diagnosis cites, and its claim.
 >
-> • 14 orders late, rule needs 10 → supported. The plan goes to the merchant for approval.
-> • 8 orders late → violation (99%). Plan blocked, button disabled.
-> • Diagnosis cites only ad data → insufficient information. Blocked.
+> The attached demo shows two live runs:
 >
-> The check also runs on the server when the plan is requested, so a client can't skip it by claiming "supported".
+> • 14 late orders, with a policy requiring at least 10 → supported. A plan can proceed to merchant approval.
+> • 8 late orders → violation. The plan is blocked and the button locks.
 >
-> Sapling's calibrated status is deliberately conservative and is often "unsure". We show it next to the verdict and gate on Sapling's top label, so a human still approves every plan that passes.
+> Then we stress-test Sapling with four real API checks: supported evidence, a threshold violation, missing delivery records with only ad data, and contradictory reports about the same orders. The UI shows every label's probability and the actual latency, alongside the expected and returned verdicts.
+>
+> The server checks again when a plan is requested. A forged browser-side pass cannot bypass a blocking verdict: the request returns HTTP 409. Unavailable or malformed Sapling responses also block a plan. A human still approves every plan before execution.
+>
+> We expose Sapling's conservative calibrated status as well as its raw label. When the calibrated status is "unsure", the gate uses the raw label; these are model classifications, not guarantees of correctness.
 >
 > Repo: https://github.com/OactoDev/Normal/tree/sapling-quest
 >
 > #NightShift #AI #ecommerce
 
+Attach `Normal_Sapling_Quest.mp4` and select Mubit from LinkedIn's mention picker.
+
 ## #side-quests message
 
 > Team: Normal
-> Task: Banyan Sapling checks an AI's root-cause diagnosis against the merchant's policy and evidence before Normal's agents spend money on it; a violation or missing evidence blocks the plan (8 late orders vs a 10-order rule: violation, 99%).
-> X: <X post link>
-> LinkedIn: <LinkedIn post link>
+> Task: Banyan Sapling checks Normal's root-cause diagnosis against the merchant's policy and cited evidence before a recovery plan is built. The demo shows supported/blocked runs plus four live checks for support, violation, missing evidence and contradictory evidence; the server rechecks before plan generation.
+> X: <paste published X post link>
+> LinkedIn: <paste published LinkedIn post link>
 > Repo: https://github.com/OactoDev/Normal/tree/sapling-quest
 
----
+## Reproduce the video
 
-## Demo run (for a recording)
+From the Team repository, with `normal-demo` running on port 3100:
 
-1. `Intelligence` tab → scenario `delivery_delays`, severity 85% → Inject → Run Mubit AI Diagnosis → Banyan Sapling card shows **supported**; plan button is live.
-2. Severity 15% → Inject → Run diagnosis → **violation · ~99%**, red "Plan blocked" panel, button reads "Blocked by Banyan Sapling".
-3. Optional: run `npm run test:sapling` in a terminal to show the live verdicts and the forged-"supported" refusal.
+```bash
+demo-recording/pipeline/make_video.sh demo-recording/pipeline/scenes.json "$HOME/Downloads/Movie on 24-10-2026 at 12.35.mov" demo-recording/sapling/Normal_Sapling_Quest.mp4
+```
+
+The pipeline README covers dependencies, cached audio, individual stages, and the `--no-lipsync` fallback. Credentials are read from `~/.config/elevenlabs/` and never committed.
+
+## Live checks before recording
+
+The four stress cases were curled live and returned all four expected labels. Probabilities vary; the recorded UI is authoritative for that run. Parallel requests can queue at the provider, so the narration makes no fixed latency promise.
+
+1. Intelligence → **14 late orders · test pass** → **Run Mubit AI Diagnosis** → supported; generate a plan and show merchant approval without approving or executing it.
+2. Intelligence → **8 late orders · test block** → diagnosis → violation; plan button disabled.
+3. **Stress-test Sapling (4 live checks)** → compare the expected and actual verdicts, probabilities and latency.
+4. `npm run test:sapling` verifies real Sapling responses and that plan generation refuses a forged pass.

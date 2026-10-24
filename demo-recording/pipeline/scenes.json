@@ -1,0 +1,94 @@
+{
+  "title": "Normal × Banyan Sapling",
+  "tagline": "Before agents act, check the evidence.",
+  "repo": "https://github.com/OactoDev/Normal/tree/sapling-quest",
+  "baseUrl": "http://localhost:3100",
+  "voiceId": "rsG3bwQLHQmLztP16wvR",
+  "modelId": "eleven_multilingual_v2",
+  "targetSeconds": 104,
+  "scenes": [
+    {
+      "id": "title",
+      "label": "THE QUESTION",
+      "narration": "What happens when an AI stops giving advice and starts spending your money? This is Normal, and this is how Mubit's Banyan Sapling keeps it honest.",
+      "action": {
+        "type": "title"
+      },
+      "caption": "What if the AI gets the diagnosis wrong?",
+      "holdSeconds": 1
+    },
+    {
+      "id": "normal",
+      "label": "AGENTS THAT ACT",
+      "narration": "Normal runs an online shop with AI agents. When sales drop, it diagnoses why, then marketing, customer care and storefront agents act: cutting ad budgets, emailing customers, changing the store.",
+      "action": {
+        "type": "goto-tab",
+        "tab": "Intelligence",
+        "primeScenario": 0.85
+      },
+      "caption": "Diagnosis → plan → merchant approval → agent action",
+      "holdSeconds": 0.65
+    },
+    {
+      "id": "gate",
+      "label": "THE POLICY GATE",
+      "narration": "Every one of those actions trusts the diagnosis. So before any plan exists, we hand Sapling three things: the merchant's own policy, the evidence the AI cited, and the AI's claim. Sapling's verdict decides whether the plan can proceed.",
+      "action": {
+        "type": "scroll",
+        "testId": "sapling-policy-gate"
+      },
+      "caption": "Merchant policy + cited evidence + AI claim → Sapling verdict",
+      "holdSeconds": 0.65
+    },
+    {
+      "id": "supported",
+      "label": "SUPPORTED RUN",
+      "narration": "Live run. Fourteen orders missed their delivery promise. The policy needs at least ten. Sapling: supported. The plan goes to the merchant for approval.",
+      "action": {
+        "type": "run-scenario",
+        "sev": 0.85,
+        "expected": "supported",
+        "showReview": true
+      },
+      "caption": "14 late orders · at least 10 required · supported",
+      "holdSeconds": 2.2
+    },
+    {
+      "id": "blocked",
+      "label": "BLOCKED RUN",
+      "narration": "Now change one number. Only eight late orders. Same policy, same AI. Sapling flags a violation. The plan is blocked, the button locks, and no money moves.",
+      "action": {
+        "type": "run-scenario",
+        "sev": 0.15,
+        "expected": "violation",
+        "hoverBlocked": true
+      },
+      "caption": "8 late orders · below the threshold · plan blocked",
+      "holdSeconds": 1.2
+    },
+    {
+      "id": "stress",
+      "label": "FOUR LIVE CHECKS",
+      "narration": "And it's not just thresholds. Four live checks at once. Evidence that clears the rule: supported. Evidence that misses it: violation. Evidence about ads, not deliveries: insufficient information. Evidence that contradicts itself: inconsistent. Four outcomes, one policy gate.",
+      "action": {
+        "type": "click",
+        "testId": "sapling-stress-button",
+        "waitForTestId": "sapling-stress-complete",
+        "focusTestId": "sapling-stress-results"
+      },
+      "caption": "Supported · violation · insufficient information · inconsistent context",
+      "holdSeconds": 0.65
+    },
+    {
+      "id": "close",
+      "label": "EVIDENCE BEFORE ACTION",
+      "narration": "The check runs again on the server, so a faked pass in the browser gets a four-oh-nine. Evidence first, policy checked, and a human approves every plan that passes. That's Normal, with Banyan Sapling.",
+      "action": {
+        "type": "end-card"
+      },
+      "caption": "Evidence first. Policy checked. Human approved.",
+      "holdSeconds": 1
+    }
+  ],
+  "speechSpeed": 0.9
+}
