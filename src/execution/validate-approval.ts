@@ -16,11 +16,16 @@ async function validate(h: PlanHandoffT, input: z.infer<typeof ApprovalInput>, p
   if (input.decision === "rejected" ? input.approvedActionIds.length !== 0 : input.approvedActionIds.length === 0) throw new ToolError("INVALID_DECISION", "Decision does not match selected actions");
   if (input.decision === "approved" && input.approvedActionIds.length !== h.plan.actions.length) throw new ToolError("INVALID_DECISION", "Approve all requires every action");
   validateGraph(h);
+  const dependent = h.plan.actions.find(a => input.approvedActionIds.includes(a.actionId) && a.dependsOnActionIds.some(id => !input.approvedActionIds.includes(id)));
+  if (dependent) throw new ToolError("DEPENDENCY_NOT_APPROVED", `${dependent.actionId} needs its dependencies approved too`);
   for (const a of h.plan.actions.filter(a => input.approvedActionIds.includes(a.actionId))) await validatePolicy(a);
   authorize(principal, h.plan.businessId, h.plan.actions.filter(a => input.approvedActionIds.includes(a.actionId)).map(a => a.actionType));
 }
 export async function createApproval(h: PlanHandoffT, raw: unknown, principal: string) {
   const input = ApprovalInput.parse(raw); await validate(h,input,principal);
+  // Once every action succeeded the plan is done; a changed strategy needs a new plan version.
+  const done = new Set((await executions.find({ planId: h.plan.planId })).filter(e => e.planVersion === h.plan.planVersion && e.status === "succeeded").map(e => e.actionId));
+  if (h.plan.actions.every(a => done.has(a.actionId))) throw new ToolError("PLAN_COMPLETED", "Every action in this plan already succeeded", false, false, 409);
   if ((await executions.find({ planId: h.plan.planId })).some(e => ["queued", "running"].includes(e.status))) throw new ToolError("EXECUTION_ACTIVE", "Wait for running actions before changing the approval", false, false, 409);
   const approval = PlanApproval.parse({ approvalId: randomUUID(), planId: h.plan.planId, planVersion: input.planVersion, decision: input.decision, approvedActionIds: input.approvedActionIds, reviewingPrincipal: principal, decidedAt: new Date().toISOString() });
   const ttl = Number(process.env.APPROVAL_TTL_MINUTES || 30);

@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as store from "../store/repos";
 import { reconcileDeliveries } from "../execution/delivery-monitor";
+import { storefrontAgent } from "../agents/storefront-agent";
 
 (process.env as Record<string, string>).NODE_ENV = "test";
 process.env.EMAIL_PROVIDER = "memory";
@@ -182,10 +183,9 @@ async function dependencies() {
 
   await resetDemo("plan_chain");
   const fresh = await loadPlanHandoff("plan_chain");
-  const bannerOnly = await approve(fresh, ["act_banner_001"]);
-  const snap2 = await execute("plan_chain", bannerOnly.approval.approvalId);
-  assert(snap2.executions[0].status === "cancelled" && snap2.executions[0].error.code === "DEPENDENCY_NOT_APPROVED", "unapproved dependency blocks");
-  ok("an action whose dependency was not approved is cancelled, not run");
+  await expectCode("DEPENDENCY_NOT_APPROVED", () => approve(fresh, ["act_banner_001"]));
+  assert((await store.executions.find({ planId: "plan_chain" })).length === 0, "nothing executed");
+  ok("approving an action without its dependency is rejected");
 }
 
 async function emailRetrySafety() {
@@ -243,6 +243,86 @@ async function deliveryMonitoring() {
   ok("all sends delivered promotes the ledger and ActionOutcome to verified");
 }
 
+async function robustness() {
+  await resetDemo("plan_001");
+  // An unexpected error (store, agent or bug) ends that execution, never the whole run.
+  const crash = await variant("plan_crash", () => {});
+  const { approval } = await approve(crash, crash.plan.actions.map(a => a.actionId));
+  const runAction = storefrontAgent.runAction;
+  storefrontAgent.runAction = async () => { throw new Error("store connection dropped"); };
+  let snap;
+  try { snap = await execute("plan_crash", approval.approvalId); } finally { storefrontAgent.runAction = runAction; }
+  const banner = snap.executions.find(e => e.actionId === "act_banner_001");
+  // The agent threw before its tool claimed the run, so no side effect happened: cancelled, not failed.
+  assert(banner.status === "cancelled" && banner.error.code === "ORCHESTRATOR_ERROR" && banner.error.retryable, `crash recorded as retryable, got ${banner.status} ${banner.error?.code}`);
+  assert(snap.executions.filter(e => e.status === "succeeded").length === 2, "the other actions still succeeded");
+  assert(snap.planStatus === "approved" && snap.needsAttention, `plan handed back for retry, got ${snap.planStatus}`);
+  ok("an unexpected agent error fails only its action and leaves the plan retryable");
+
+  const retried = await execute("plan_crash", approval.approvalId);
+  assert(retried.executions.every(e => e.status === "succeeded") && retried.planStatus === "completed", "retry completes the plan");
+  await expectCode("PLAN_COMPLETED", () => approve(crash, crash.plan.actions.map(a => a.actionId)));
+  ok("a completed plan cannot be re-approved back to an earlier state");
+
+  // Approval replaced while work was queued: the cancelled actions run under the newer approval.
+  await resetDemo("plan_001");
+  const raced = await variant("plan_superseded", () => {});
+  const first = await approve(raced, raced.plan.actions.map(a => a.actionId));
+  let work: (() => Promise<void>) | undefined;
+  await orchestrator.start("plan_superseded", first.approval.approvalId, undefined, OWNER, w => { work = w; });
+  const record = await store.approvals.findOne(first.approval.approvalId), newerId = "approval_newer";
+  await store.approvals.insert(newerId, { ...record, approval: { ...record.approval, approvalId: newerId, decidedAt: new Date().toISOString() } });
+  await store.approvalHeads.update("plan_superseded:v1", { $set: { planId: "plan_superseded", planVersion: 1, approvalId: newerId } });
+  await work();
+  const cancelled = await orchestrator.snapshot("plan_superseded");
+  assert(cancelled.executions.every(e => e.status === "cancelled" && e.error.code === "APPROVAL_SUPERSEDED"), "stale approval cancelled the queue");
+  const rerun = await execute("plan_superseded", newerId);
+  assert(rerun.executions.every(e => e.status === "succeeded" && e.approvalId === newerId), "cancelled actions ran under the newer approval");
+  ok("actions cancelled by a superseded approval can run under the newer one");
+
+  // Retrying a dependent alone, when its dependency was never queued, must not leave it queued forever.
+  await resetDemo("plan_001");
+  const blocked = await variant("plan_blocked", x => { x.plan.actions[2].dependsOnActionIds = [x.plan.actions[1].actionId]; });
+  const all = await approve(blocked, blocked.plan.actions.map(a => a.actionId));
+  const alone = await execute("plan_blocked", all.approval.approvalId, ["act_banner_001"]);
+  assert(alone.executions.length === 1 && alone.executions[0].status === "cancelled" && alone.executions[0].error.code === "DEPENDENCY_BLOCKED", "dependent cancelled, not stuck queued");
+  assert(alone.planStatus === "approved", `plan not stuck executing, got ${alone.planStatus}`);
+  const together = await execute("plan_blocked", all.approval.approvalId);
+  assert(together.executions.every(e => e.status === "succeeded"), "running the full approval completes it");
+  ok("a dependent whose dependency was never queued is cancelled, then runs once it is");
+
+  // A run cut off mid-action (crash, serverless timeout) is swept and retried without a second budget write.
+  await resetDemo("plan_001");
+  const stale = await variant("plan_stale", () => {});
+  const adsOnly = await approve(stale, ["act_ads_001"]);
+  const key = "plan_stale:v1:act_ads_001";
+  await store.executions.claim(key, ActionExecution.parse({ executionId: "exec_stale", planId: "plan_stale", planVersion: 1, approvalId: adsOnly.approval.approvalId, actionId: "act_ads_001", missionId: "plan_stale:v1:marketing", idempotencyKey: key, status: "running", attempts: 1, toolName: "ads.set_daily_budget", dryRun: false, startedAt: new Date(Date.now() - 10 * 60000).toISOString() }));
+  const swept = await orchestrator.snapshot("plan_stale");
+  assert(swept.executions[0].status === "failed" && swept.executions[0].error.code === "STALE_RUNNING" && swept.executions[0].error.retryable, "stale run swept to a retryable failure");
+  const recovered = await execute("plan_stale", adsOnly.approval.approvalId);
+  assert(recovered.executions[0].status === "succeeded" && (await store.campaigns.findOne("campaign_A")).dailyBudgetMinor === 3000, "retry verified £30");
+  assert((await store.events.find()).filter(e => e.type === "campaign.budget_updated" && e.payload.planId === "plan_stale").length === 1, "one budget event");
+  ok("a stale running execution is swept and safely retried");
+
+  // Limits fail closed instead of silently trimming or switching providers.
+  const overLimit = await variant("plan_over_limit", x => { x.plan.actions[1].params.maxRecipients = 1; });
+  const limitError = await approve(overLimit, ["act_email_001"]).then(() => null, e => e as Error);
+  assert(limitError?.name === "ZodError" && limitError.message.includes("maxRecipients"), `expected recipient-limit error, got ${limitError?.message}`);
+  ok("more orders than maxRecipients is rejected, not truncated");
+
+  await resetDemo("plan_001");
+  const saved = { provider: process.env.EMAIL_PROVIDER, key: process.env.RESEND_API_KEY };
+  process.env.EMAIL_PROVIDER = "resend"; delete process.env.RESEND_API_KEY;
+  const noKey = await variant("plan_no_key", () => {});
+  const emailOnly = await approve(noKey, ["act_email_001"]);
+  let noKeySnap;
+  try { noKeySnap = await execute("plan_no_key", emailOnly.approval.approvalId); }
+  finally { process.env.EMAIL_PROVIDER = saved.provider; if (saved.key !== undefined) process.env.RESEND_API_KEY = saved.key; }
+  assert(noKeySnap.executions[0].status === "failed" && noKeySnap.executions[0].error.code === "EMAIL_CONFIG", "resend without key fails closed");
+  assert((await store.emails.find({ planId: "plan_no_key" })).length === 0, "nothing sent through a fallback provider");
+  ok("an explicit email provider without its key fails closed");
+}
+
 async function main() {
   const csv = process.env.NORMAL_STORE === "csv";
   console.log(`=== Execution module tests (${csv ? `CSV files in ${path.resolve(process.env.NORMAL_DATA_DIR || "data")}` : "in-memory store"}) ===`);
@@ -258,6 +338,7 @@ async function main() {
   await dependencies();
   await emailRetrySafety();
   await deliveryMonitoring();
+  await robustness();
   console.log(`🎉 ${passed} checks passed`);
   process.exit(0);
 }

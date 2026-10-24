@@ -9,7 +9,7 @@ export async function executeSendDelayNotice(raw: unknown, context: { planId: st
   const p = EmailParams.parse(raw), provider = emailProvider();
   const to = process.env.EMAIL_TEST_RECIPIENT || (["memory", "demo"].includes(provider) ? "controlled@example.com" : "");
   if (!z.string().email().safeParse(to).success) throw new ToolError("EMAIL_CONFIG", "EMAIL_TEST_RECIPIENT must be a controlled test inbox");
-  const target = (await orders.find({ businessId: "nova_store", status: "delayed" })).filter(o => p.orderIds.includes(o.orderId)).slice(0,p.maxRecipients);
+  const target = (await orders.find({ businessId: "nova_store", status: "delayed" })).filter(o => p.orderIds.includes(o.orderId));
   if (!target.length) throw new ToolError("NO_RECIPIENTS", "No authorised delayed orders");
   for (const order of target) {
     const key = `${context.idempotencyKey}:${order.orderId}`, existing = await emails.findOne(key);

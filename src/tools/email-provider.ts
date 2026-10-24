@@ -6,7 +6,7 @@ export function emailProvider() {
   const provider = process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? "resend" : "ethereal");
   if (provider === "demo" && process.env.PUBLIC_DEMO === "1") return provider;
   if (!["resend", "ethereal", "memory"].includes(provider) || (provider === "memory" && process.env.NODE_ENV !== "test")) throw new ToolError("EMAIL_CONFIG", "Invalid email provider; memory is test-only");
-  if (provider === "resend" && !process.env.RESEND_API_KEY) return "ethereal";
+  if (provider === "resend" && !process.env.RESEND_API_KEY) throw new ToolError("EMAIL_CONFIG", "EMAIL_PROVIDER=resend needs RESEND_API_KEY; nothing was sent");
   return provider;
 }
 // Getting the Ethereal account happens before any message leaves, so a failure here is a safe, retryable non-send.

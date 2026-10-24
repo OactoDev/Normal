@@ -15,7 +15,8 @@ export async function seedDefaultPlan() {
   await handoffs.claim("plan_001:v1", h);
 }
 export async function storedHandoff(planId: string): Promise<PlanHandoffT> {
-  await seedDefaultPlan();
+  // Reads stay read-only once the demo plan exists; reset removes it, so the next read reseeds.
+  if (!await handoffs.findOne("plan_001:v1")) await seedDefaultPlan();
   const records = (await handoffs.find()).filter(h => h.plan.planId === planId).sort((a,b) => b.plan.planVersion-a.plan.planVersion);
   if (!records[0]) throw new ToolError("NOT_FOUND", "Plan not found", false, false, 404);
   return records[0];
