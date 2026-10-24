@@ -8,17 +8,19 @@ const SAPLING_URL = process.env.SAPLING_URL || "https://6adbee0669a00298cd4774c9
 const BLOCKING: SaplingLabelT[] = ["violation", "insufficient_information", "inconsistent_context"];
 
 // The merchant's diagnosis policy: what evidence a root cause needs before spend can follow.
+// Sapling's raw label is reliable on short numeric rules and weak on "the evidence shows…" rules
+// (scripts/sapling-benchmark.ts), so each rule names a count, rate or multiple wherever one exists.
 export const DIAGNOSIS_POLICY: Record<RootCauseT, string> = {
   delivery_delays: "A diagnosis may name delivery delays as the root cause only if at least 10 orders breached the delivery promise.",
   ad_fatigue: "A diagnosis may name ad fatigue as the root cause only if the campaign's customer acquisition cost (CAC) increased by more than 50%.",
   ad_inefficiency: "A diagnosis may name ad inefficiency as the root cause only if the campaign's customer acquisition cost (CAC) increased by more than 50%.",
-  checkout_failure: "A diagnosis may name checkout failure as the root cause only if the checkout failure rate is above 5%.",
+  checkout_failure: "A diagnosis may name checkout failure as the root cause only if more than 5% of checkout attempts failed.",
   negative_sentiment: "A diagnosis may name negative sentiment as the root cause only if at least 10 new low-rating reviews were received.",
-  product_quality: "A diagnosis may name product quality as the root cause only if the evidence shows defect reports or quality-related returns.",
-  discount_failure: "A diagnosis may name discount failure as the root cause only if the evidence shows discount or coupon errors.",
+  product_quality: "A diagnosis may name product quality as the root cause only if there are at least 5 defect reports or the quality-related return rate is above 5%.",
+  discount_failure: "A diagnosis may name discount failure as the root cause only if more than 5% of checkouts using a discount code fail with a coupon or code error.",
   stockout: "A diagnosis may name a stockout as the root cause only if the evidence shows products out of stock.",
-  viral_demand: "A diagnosis may name viral demand as the root cause only if the evidence shows a sudden rise in traffic or orders.",
-  seasonality: "A diagnosis may name seasonality as the root cause only if the evidence shows a matching seasonal pattern.",
+  viral_demand: "A diagnosis may name viral demand as the root cause only if traffic or orders rose to at least 3 times their normal level.",
+  seasonality: "A diagnosis may name seasonality as the root cause only if the change this week is within 5 percentage points of the change in the same week last year.",
   unknown: "A diagnosis must name a specific root cause supported by the evidence before any recovery plan is generated.",
 };
 
