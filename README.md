@@ -8,7 +8,7 @@ A small ecommerce business can see that sales have fallen. Finding the reason us
 
 We built Normal to bring that work into one place. It watches business activity, groups unusual changes into an investigation, uses Mubit to compare possible explanations, and proposes a response that a person can review. Approved actions run through restricted tools. Normal saves the changes and assesses later observations against the plan's success criteria.
 
-Our hackathon demonstration uses an **unaffiliated Nike shop simulation**. The orders, customers, advertising activity and deliveries are synthetic. The model requests, database records, validation checks and recorded changes described below are genuine development/demo results. Nothing here changes a real advertising account, sends a real customer email or takes a real payment.
+Our hackathon demonstration uses an **Nike shop simulation**. The orders, customers, advertising activity and deliveries are synthetic. The model requests, database records, validation checks and recorded changes described below are genuine development/demo results. Nothing here changes a real advertising account, sends a real customer email or takes a real payment.
 
 ## Start here
 
@@ -80,7 +80,29 @@ Normal keeps a durable call ledger with the Mubit request ID, route, model, repo
 
 To exercise these paths locally, configure `MUBIT_API_KEY` and the relevant model IDs, start `npm run investigator:work` and `npm run planner:work`, then open an eligible investigation. Research is opt-in with `NORMAL_EXTERNAL_RESEARCH_ENABLED=true`. For the hackathon's Mubit-only setup, keep `NORMAL_DIRECT_GEMINI_FALLBACK=false`; enabling that fallback can send research directly to Google after an unambiguous Mubit failure. The saved [Stage 5](docs/stage5-verification.md) and [Stage 6](docs/stage6-verification.md) reports show the actual request history and acceptance limits.
 
-**Adapter training is an ambition, not a measured result in this branch.** Repeated task traffic and call records are present, but we have no linked proof here of a passing adapter serving these tasks or improving held-out quality, cost or latency. Local correction records do not establish that Mubit accepted feedback into training. Mubit describes its review, training and testing process in the [official adapter guide](https://docs.mubit.ai/guides/first-adapter). We will report an adapter result only with its task/version, test outcome and a reproducible comparison.
+### Adapter training: what the console actually shows
+
+We checked the training path and kept the results, including the failure. These are two separate Mubit tasks:
+
+| Task | Recorded result | What it means |
+| --- | --- | --- |
+| Existing diagnostic adapter, `ad_lane_0026fbd6`, v1 | Mubit displays **Passed**, with 100% teacher agreement on **nine** test cases. No production request path is linked. | Mubit produced and tested an adapter. This is its own small teacher-agreement check, not proof of better diagnosis. |
+| Diagnostic comparison on six new synthetic cases | The available reference matched **6/6** authored primary conclusions; the adapter matched **5/6**. It mistook a tracking problem for checkout failure. | We found a concrete error and did not promote the adapter. The reference was `gemini-3.8-flash`; the original teacher, `gemini-4-argon`, was unavailable. These agent-reviewed counts are not independently adjudicated accuracy. |
+| New source-support pilot, `normal.source_support.v1` | **40/40** collection calls completed. The console at **07:22 UTC, 25 October 2026** showed **0 kept, 0 rejected, 40 awaiting review; first training not started**. A separate provider baseline matched **15/24** authored labels. | Collection works; this task has no trained version to compare yet. The 24 held-out cases were excluded from training storage. |
+
+![Mubit diagnostic adapter console showing a passed latest training result and nine teacher-agreement test cases](docs/training/diagnostic-adapter-v1/console/training-result.png)
+
+*Existing diagnostic adapter: the latest training result says Passed. The same console shows no linked production request path. The displayed 100% belongs to Mubit’s nine-case check.*
+
+![Mubit source-support console showing 40 calls, zero kept examples and first training not started](docs/training/source-support-v1/console/recheck-2026-10-25-0722.jpg)
+
+*Rechecked at 07:22 UTC on 25 October 2026: all 40 calls are present, with 40 reviews queued and 3 running. First training has not started; there is no source-support adapter version to test yet. The sidebar’s three adapters belong to the workspace, not to this task.*
+
+![Mubit side-by-side comparison showing the reference identifying a tracking problem while the diagnostic adapter selects checkout failure](docs/training/diagnostic-adapter-v1/console/tracking-artifact.png)
+
+*The comparison preserves an error rather than claiming improvement: normal payments and orders contradict the adapter’s checkout-failure conclusion.*
+
+The [evaluation report](docs/adapter-evaluation-2026-10-25.md) links the frozen cases, actual replies and scored rows. The [training runbook](docs/training-integration.md) links all 64 source-support calls and explains safe resumption and the pending comparison. Run `npm run training:source -- report` to recompute that pilot locally without an API key or new provider calls. **No independent quality improvement, production speedup or cost saving is established.** Local corrections and outcome feedback do not automatically retrain Mubit.
 
 ## Evidence you can check
 
@@ -123,6 +145,7 @@ Across the 15 healthy runs, one incident was recorded. Checkout escalation and s
 | Stage 7 build/static checks | Production build and TypeScript passed; ESLint had **0 errors and 14 warnings** | [Stage 7 verification](docs/stage7-verification.md) |
 | Stage 8 outcome assessment | **27/27 focused tests** and **1/1** desktop acceptance; build and TypeScript passed | [Stage 8 verification](docs/stage8-verification.md) |
 | Investigation decision canvas | **4/4** focused desktop checks; TypeScript and build passed | [Canvas verification](docs/investigation-redesign-verification.md) |
+| Adapter-training integration | **83/83 focused tests**, TypeScript, production build, focused lint and **15/15** contract examples passed; saved pilot recomputed offline | [Training validation and reproduction](docs/training-integration.md#validation) |
 | Full regression | **307/307 across 52 files** is the previous complete baseline. A later run reached **319/320**; a focused repair passed, but the subsequent full rerun was interrupted. A current full-suite pass remains unestablished. | [Full history and limitations](docs/stage5-verification.md#focused-verification-policy-and-latest-results) |
 
 The focused test counts overlap in places and should not be added together. Stage 8 and the revised investigation canvas have no recorded mobile/tablet run or full regression. The canvas report also records a failed global unchanged-data guard while other workers changed monitoring state; it does not claim global preservation.

@@ -28,7 +28,7 @@ Browser tab: 1331642535, Title: "Try models — Middleware console", URL: "https
 			27 button Getting started
 			28 link Description: How Mubit works, Value: app.mubit.ai/console/projects/ws-31028979027c7c75/integration
 			29 text Normal
-			30 pop up button (collapsed) Description: enaihouwaspaul@gmail.com, Admin: account menu, Secondary Actions: Expand
+			30 pop up button (collapsed) Description: [account email redacted], Admin: account menu, Secondary Actions: Expand
 		31 container
 			32 container Breadcrumb
 				33 link Description: normal-1792783517785903653, Value: app.mubit.ai/console/projects/ws-31028979027c7c75

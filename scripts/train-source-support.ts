@@ -6,6 +6,7 @@ import { SourceAssessments } from "../src/intelligence/investigator/schemas";
 import { checksum, sourceDataset, validateSplit } from "../src/intelligence/training/source-dataset";
 import { compare, prediction, score, type ScoredOutput } from "../src/intelligence/training/score";
 import { z } from "zod";
+import { configuredModels } from "../src/intelligence/model-settings";
 import { readConsoleStatus } from "../src/intelligence/training/console-status";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
@@ -16,7 +17,7 @@ const directory = resolve("docs/training", experiment);
 const cases = sourceDataset();
 validateSplit(cases);
 const command = process.argv[2] || "prepare";
-const currentConfig = providerConfig();
+const currentConfig = { ...configuredModels(), reasoning: z.enum(["low", "medium", "high"]).parse(process.env.MUBIT_REASONING_DEPTH || "low"), geminiTransport: z.enum(["native", "openai"]).parse(process.env.MUBIT_GEMINI_TRANSPORT || "native") };
 // Reporting past evidence must not silently reinterpret it as the live application's current model.
 // Chargeable operations still use current configuration and reject any experiment drift in prepare().
 const frozenConfig = ["report", "compare"].includes(command) && existsSync(`${directory}/manifest.json`)
@@ -45,15 +46,39 @@ function save(path: string, data: unknown) {
   writeFileSync(temporary, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
   renameSync(temporary, path);
 }
-function readEntries(): Entry[] { return existsSync(`${directory}/calls.json`) ? JSON.parse(readFileSync(`${directory}/calls.json`, "utf8")) : []; }
+const EntrySchema = z.object({
+  caseId: z.string(), phase: z.enum(["baseline", "collect"]), inputHash: z.string(), fingerprint: z.string(), datasetHash: z.string(),
+  status: z.enum(["pending", "completed", "failed"]), startedAt: z.string().datetime(), completedAt: z.string().datetime().optional(),
+  requestId: z.string().nullable().optional(), providerRequestId: z.string().nullable().optional(), ambiguous: z.boolean().optional(),
+  agreesWithAuthoredLabel: z.boolean().optional(), recording: z.enum(["full", "metadata"]), output: z.unknown().optional(), error: z.string().optional(),
+  latencyMs: z.number().finite().nonnegative().optional(), totalTokens: z.number().finite().int().nonnegative().nullable().optional(), costUsd: z.number().finite().nonnegative().nullable().optional(),
+}).strict();
+function readEntries(): Entry[] {
+  if (!existsSync(`${directory}/calls.json`)) return [];
+  const entries = z.array(EntrySchema).parse(JSON.parse(readFileSync(`${directory}/calls.json`, "utf8")));
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const row = cases.find((c) => c.caseId === entry.caseId), key = `${entry.phase}:${entry.caseId}`;
+    if (seen.has(key)) throw new Error("duplicate_ledger_entry");
+    seen.add(key);
+    if (!row || entry.phase !== (row.split === "train" ? "collect" : "baseline") || entry.recording !== (row.split === "train" ? "full" : "metadata")
+      || entry.datasetHash !== datasetHash || entry.fingerprint !== fingerprint || entry.inputHash !== checksum(row.input)) throw new Error("ledger_identity_mismatch");
+    if (entry.status === "completed" && (!entry.completedAt || !entry.requestId || entry.output === undefined)) throw new Error("incomplete_completed_entry");
+  }
+  return entries;
+}
 function prepare() {
   mkdirSync(directory, { recursive: true });
+  readEntries(); // Reject a mismatched ledger before replacing any local evidence.
   if (existsSync(`${directory}/manifest.json`)) {
     const old = JSON.parse(readFileSync(`${directory}/manifest.json`, "utf8"));
     const oldTransport = old.transport ?? (old.model.startsWith("gemini-") ? "native" : "openai");
-    if (old.datasetHash !== datasetHash || old.fingerprint !== fingerprint || old.model !== model || old.reasoning !== manifest.reasoning || oldTransport !== transport) throw new Error("Frozen experiment differs; use a new versioned experiment directory.");
+    if (oldTransport !== transport || old.datasetHash !== datasetHash || old.fingerprint !== fingerprint || old.model !== model || old.reasoning !== manifest.reasoning) throw new Error("Frozen experiment differs; use a new versioned experiment directory.");
   } else save(`${directory}/manifest.json`, { ...manifest, frozenAt: new Date().toISOString() });
-  if (!existsSync(`${directory}/comparison-protocol.json`)) save(`${directory}/comparison-protocol.json`, {
+  if (existsSync(`${directory}/comparison-protocol.json`)) {
+    const protocol = JSON.parse(readFileSync(`${directory}/comparison-protocol.json`, "utf8"));
+    if (protocol.datasetHash !== datasetHash || protocol.fingerprint !== fingerprint || protocol.rule !== manifest.comparisonRule) throw new Error("frozen_comparison_protocol_mismatch");
+  } else save(`${directory}/comparison-protocol.json`, {
     frozenAt: new Date().toISOString(), datasetHash, fingerprint, rule: manifest.comparisonRule,
     baselineAlreadyObserved: readEntries().some((e) => e.phase === "baseline" && e.status === "completed"),
     note: readEntries().some((e) => e.phase === "baseline" && e.status === "completed")
@@ -74,8 +99,7 @@ function report() {
   const adapterComparison = existsSync(comparisonPath) ? JSON.parse(readFileSync(comparisonPath, "utf8")) : null;
   if (adapterComparison && (adapterComparison.datasetHash !== datasetHash || adapterComparison.fingerprint !== fingerprint || adapterComparison.model !== model)) throw new Error("saved_comparison_identity_mismatch");
   const result = { generatedAt: new Date().toISOString(), task: SOURCE_TASK, model, transport, datasetHash, fingerprint,
-    liveConfiguration: { model: currentConfig.investigatorModel, reasoning: currentConfig.reasoning, transport: liveTransport,
-      matchesFrozenExperiment: currentConfig.investigatorModel === model && currentConfig.reasoning === reasoning && liveTransport === transport },
+    liveConfiguration: { model: currentConfig.investigatorModel, reasoning: currentConfig.reasoning, transport: liveTransport, matchesFrozenExperiment: currentConfig.investigatorModel === model && currentConfig.reasoning === reasoning && liveTransport === transport },
     baseline: score(cases.filter((c) => c.split === "test"), baseline),
     collection: { attempted: collected.length, successful: collected.filter((e) => e.status === "completed").length,
       teacherAgreement: score(cases.filter((c) => c.split === "train"), collected),
@@ -91,6 +115,7 @@ function report() {
   console.log(JSON.stringify({ baseline: { attempted: result.baseline.attempted, correct: result.baseline.correct, total: result.baseline.total, accuracy: result.baseline.accuracy, macroF1: result.baseline.macroF1 }, collection: { successful: result.collection.successful, attempted: result.collection.attempted }, comparison: result.comparison }));
 }
 async function run(phase: "baseline" | "collect") {
+  providerConfig(); // Reject missing credentials before creating a pending billable entry.
   prepare();
   const lockPath = `${directory}/run.lock`;
   writeFileSync(lockPath, String(process.pid), { flag: "wx", mode: 0o600 });
@@ -105,7 +130,7 @@ async function run(phase: "baseline" | "collect") {
       const old = entries.find((e) => e.phase === phase && e.caseId === row.caseId);
       if (old) {
         if (old.datasetHash !== datasetHash || old.fingerprint !== fingerprint || old.inputHash !== checksum(row.input)) throw new Error("result_identity_mismatch");
-        if (old.status === "pending" || old.ambiguous) throw new Error(`Outcome of ${row.caseId} is uncertain; inspect its gateway record before deciding whether to retry. No automatic replay.`);
+        if (old.status !== "completed" || old.ambiguous) throw new Error(`Outcome of ${row.caseId} needs review; inspect its gateway record before deciding whether to retry. No automatic replay.`);
         continue;
       }
       if (sent >= limit) break;
@@ -141,7 +166,7 @@ async function main() {
     const imported = z.object({ origin: z.literal("mubit_console_try_models"), task: z.literal(SOURCE_TASK), model: z.string(), fingerprint: z.string(), datasetHash: z.string(),
       adapterVersionId: z.string().min(1), taskId: z.string().min(1), capturedAt: z.string().datetime(),
       consoleEvidencePaths: z.array(z.string().min(1)).min(1),
-      results: z.array(z.object({ caseId: z.string(), inputHash: z.string(), output: z.unknown(), latencyMs: z.number().nonnegative().optional(), totalTokens: z.number().nonnegative().nullable().optional(), costUsd: z.number().nonnegative().nullable().optional(), error: z.string().optional() }).strict()),
+      results: z.array(z.object({ caseId: z.string(), inputHash: z.string(), output: z.unknown(), latencyMs: z.number().finite().nonnegative().optional(), totalTokens: z.number().finite().int().nonnegative().nullable().optional(), costUsd: z.number().finite().nonnegative().nullable().optional(), error: z.string().optional() }).strict()),
     }).strict().parse(JSON.parse(readFileSync(file, "utf8")));
     if (imported.model !== model || imported.fingerprint !== fingerprint || imported.datasetHash !== datasetHash) throw new Error("adapter_experiment_identity_mismatch");
     if (imported.consoleEvidencePaths.some((path) => !existsSync(path))) throw new Error("missing_console_evidence");
@@ -150,11 +175,13 @@ async function main() {
       const original = heldout.find((c) => c.caseId === row.caseId);
       if (!original || checksum(original.input) !== row.inputHash) throw new Error("adapter_input_identity_mismatch");
     }
-    const result = compare(heldout, readEntries().filter((e) => e.phase === "baseline"), imported.results);
+    const baseline = readEntries().filter((e) => e.phase === "baseline");
+    if (baseline.some((e) => e.status === "pending" || e.ambiguous)) throw new Error("baseline_outcome_unresolved");
+    const result = compare(heldout, baseline, imported.results);
     save(`${directory}/adapter-comparison.json`, { ...imported, comparison: result,
       provenance: "Console-observed outputs supplied by the operator; local files and screenshots are evidence, not cryptographic provider attestation.", limitations: manifest.limitations });
     console.log(JSON.stringify({ adapterVersion: imported.adapterVersionId, accuracyDelta: result.accuracyDelta, improvedInPilot: result.improvedInPilot, interval: result.sceneBootstrap95 }));
     report();
-  } else throw new Error("Usage: training:source -- prepare|baseline|collect|report|compare [adapter-results.json] [--limit=N] [--experiment=versioned-name]");
+  } else throw new Error("Usage: training:source -- prepare|baseline|collect|report|compare [adapter-results.json] [--limit=N]");
 }
 main().catch((error: unknown) => { console.error(error instanceof Error ? error.message : "training_run_failed"); process.exitCode = 1; });

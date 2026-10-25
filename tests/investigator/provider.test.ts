@@ -3,7 +3,7 @@ import { z } from "zod";
 import { callModel, promptFingerprint, gatewayRequest, jsonSchema, providerConfig, ProviderError } from "@/intelligence/investigator/provider";
 const schema = z.object({ ok: z.boolean() }).strict();
 const response = (content: unknown = { ok: true }, headers: Record<string, string> = { "x-middleware-request-id": "mreq_real" }) => new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(content) } }], usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 } }), { status: 200, headers });
-beforeEach(() => { vi.stubEnv("MUBIT_API_KEY", "mbt_test"); vi.stubEnv("GEMINI_API_KEY", "google_test"); vi.stubEnv("NORMAL_DIRECT_GEMINI_FALLBACK", "false"); });
+beforeEach(() => { vi.stubEnv("MUBIT_GEMINI_TRANSPORT", "native"); vi.stubEnv("MUBIT_API_KEY", "mbt_test"); vi.stubEnv("GEMINI_API_KEY", "google_test"); vi.stubEnv("NORMAL_DIRECT_GEMINI_FALLBACK", "false"); });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe("provider boundaries", () => {
   it("captures Gemini training through its own OpenAI-compatible endpoint with strict local validation", async () => {

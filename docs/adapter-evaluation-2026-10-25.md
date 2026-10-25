@@ -1,6 +1,6 @@
 # Adapter evaluation — 25 October 2026
 
-Current application configuration: **Gemini 4 Argon (`gemini-4-argon`) through Mubit** for all model stages. Model IDs and results below remain those of the historical calls; they are not relabelled as Gemini results.
+Current application configuration: **Gemini 4 Argon (`gemini-4-argon`) through Mubit** for all model stages. Historical results below retain their actual model IDs and do not establish Gemini accuracy or adapter improvement.
 
 **No quality improvement has been established.** A real diagnostic adapter completed a six-case comparison and missed a distinction the reference handled. The newly collected source-support task has no trained adapter yet, so its planned 24-case comparison remains pending.
 
@@ -33,12 +33,12 @@ Evidence: [actual replies](training/diagnostic-adapter-v1/results.json), [scored
 
 ## Source-support task is still reviewing examples
 
-Console sign-in now works. Task **Assess whether each supplied** (`ln_fa0a441a893491aa9e57315c`, the frozen pilot model) contains all **40 collection calls**. The refreshed console observation recorded **0 kept, 0 rejected, 40 waiting for review**, with **40 queued and 3 running** reviews. **First training: not started.** There is no version of this task to test against its saved 24-case provider baseline yet.
+Console sign-in now works. Task **Assess whether each supplied** (`ln_fa0a441a893491aa9e57315c`, `gpt-6-luna`) contains all **40 collection calls**. The refreshed console observation at **07:22 UTC on 25 October 2026** recorded **0 kept, 0 rejected, 40 waiting for review**, with **40 queued and 3 running** reviews. **First training: not started.** There is no version of this task to test against its saved 24-case provider baseline yet.
 
-The collection and evaluator now preserve that verified console observation, rather than reporting authentication as the blocker. See [source task status](training/source-support-v1/console-status.json), [machine report](training/source-support-v1/report.json), [console capture](training/source-support-v1/console/review-queue-latest.png), and [integration/runbook](training-integration.md). Mubit must finish reviewing and retain enough eligible examples before this task can train. No additional examples were sent merely to bypass the pending queue, and no adapter outputs were invented.
+The collection and evaluator now preserve that verified console observation, rather than reporting authentication as the blocker. See [source task status](training/source-support-v1/console-status.json), [machine report](training/source-support-v1/report.json), [console capture](training/source-support-v1/console/recheck-2026-10-25-0722.jpg), and [integration/runbook](training-integration.md). Mubit must finish reviewing and retain enough eligible examples before this task can train. No additional examples were sent merely to bypass the pending queue, and no adapter outputs were invented.
 
 ## Compatibility with the fetched main
 
 The checkout fast-forwarded to **`c888f3e`**, matching `origin/main`. Its new outcome-assessment and feedback implementation stores observations and operator notes locally; it does not retrain models or ingest corrections into Mubit. The new commits do not change the source-support task's model-call path or the repository instructions. The saved inference evidence remains applicable to its recorded task versions. TypeScript and focused provider/training and outcome-measurement tests were rerun on the updated checkout; the result is recorded in the integration report.
 
-At an earlier checkpoint, the local investigator model differed from the frozen source-support pilot. The application has since been configured to use Gemini 4 Argon (`gemini-4-argon`) for all model stages. Historical reporting now preserves the frozen model and explicitly reports the live mismatch. A collection smoke check correctly refused to mix configurations and left the call ledger unchanged, with no new provider call. The existing source-support baseline and adapter observations do not validate this newly configured production model. This setting is in the ignored local environment, rather than established by the Git commits.
+The final training-code review used fetched main `3c5d84a`, preserving the later technology and Gemini documentation. Its checks, portable console evidence and recovery fixes are recorded in the [training validation](training-integration.md#validation).
