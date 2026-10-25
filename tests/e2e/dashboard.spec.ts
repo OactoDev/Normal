@@ -88,7 +88,8 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("process-flow")).toBeVisible();
     await expect(page.getByTestId("stage-observe")).toHaveAttribute("data-status", "operational");
     await expect(page.getByTestId("stage-detect")).toHaveAttribute("data-status", "operational");
-    await expect(page.getByTestId("stage-investigate")).toHaveAttribute("data-status", "not_implemented");
+    // The Mubit investigator is implemented; its status depends on MUBIT_API_KEY and existing diagnoses.
+    await expect(page.getByTestId("stage-investigate")).not.toHaveAttribute("data-status", "not_implemented");
     await expect(page.getByTestId("stage-execute")).toHaveAttribute("data-status", "partner_pending");
     await page.getByTestId("stage-retrieve").click();
     await expect(page).toHaveURL(/stage=retrieve/);
@@ -108,9 +109,10 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("incident-overview")).toContainText("Advertising performance deterioration");
     await expect(page.getByTestId("related-anomalies").locator("tbody tr")).toHaveCount((await (await request.get(`/api/investigations/${investigationId}?simulationRunId=${RUN}`)).json()).anomalies.length);
     await expect(page.getByTestId("evidence-empty")).toBeVisible();
+    // The Mubit diagnosis needs collected evidence first.
     await expect(page.getByTestId("run-diagnosis")).toBeDisabled();
     await expect(page.getByTestId("propose-plan")).toBeDisabled();
-    await expect(page.getByTestId("placeholder-investigator")).toHaveAttribute("data-capability-status", "Not implemented");
+    await expect(page.getByTestId("investigator-panel")).toBeVisible();
     await expect(page.getByTestId("placeholder-execution")).toHaveAttribute("data-capability-status", "Partner integration pending");
 
     await page.getByTestId("collect-evidence").click();

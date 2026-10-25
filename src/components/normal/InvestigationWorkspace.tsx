@@ -9,6 +9,7 @@ import { useRun } from "./run-context";
 import { CapabilityPlaceholder } from "./CapabilityPlaceholder";
 import { EvidenceExplorer } from "./EvidenceExplorer";
 import { EvidenceToolTrace } from "./EvidenceToolTrace";
+import { InvestigatorPanel } from "./InvestigatorPanel";
 
 interface Data { bundle: Bundle; evidence: EvidenceList; trace: Trace }
 
@@ -97,12 +98,8 @@ export function InvestigationWorkspace() {
       <EvidenceExplorer items={evidence.items} total={evidence.total} simulationRunId={bundle.simulationRunId} />
       <EvidenceToolTrace collections={trace.collections} runs={trace.toolRuns} />
 
-      <CapabilityPlaceholder title="Mubit investigator" status="Not implemented" testId="placeholder-investigator"
-        description="Will read this investigation's evidence, form hypotheses, request further tool calls from the same registry and return a structured diagnosis for review. Nothing shown here is generated until that integration exists."
-        inputs={["Investigation and canonical Evidence above", "Evidence tool registry (eight read-only tools)", "Model-requested additional tool calls"]}
-        outputs={["Hypotheses with supporting and contradicting evidenceIds", "Model reasoning summary and missing-evidence list", "DiagnosisModelOutput → Diagnosis"]} contracts={["DiagnosisModelOutput", "Diagnosis", "RootCause"]}>
-        <button className="btn" disabled data-testid="run-diagnosis">Run diagnosis (not available)</button>
-      </CapabilityPlaceholder>
+      <InvestigatorPanel investigationId={investigationId} runId={runId} evidenceCount={evidence.total}
+        evidenceTitles={Object.fromEntries(evidence.items.map((i) => [i.evidence.evidenceId, i.evidence.title]))} onDiagnosed={() => void load(runId)} />
       <CapabilityPlaceholder title="Solution planner" status="Not implemented" testId="placeholder-planner"
         description="Will produce an evidence-backed ProposedPlan: actions per agent, evidence references, dependencies, risk classification and approval requirements, served to the partner as PlanHandoff."
         inputs={["Diagnosis", "Evidence"]} outputs={["ProposedPlan (actions, successCriteria, expiresAt)", "PlanHandoff via GET /api/plans/:id"]} contracts={["ProposedPlan", "ActionProposal", "SuccessCriterion", "PlanHandoff"]}>

@@ -17,7 +17,8 @@ function files(dir: string): string[] {
 const production = [
   ...files(join(ROOT, "src/intelligence")).filter((p) => !p.includes(`${join("src", "intelligence", "evaluation")}`)),
   ...["src/app/api/dev/monitor/run/route.ts", "src/app/api/anomalies/route.ts", "src/app/api/investigations/route.ts", "src/app/api/investigations/[id]/route.ts", "src/app/api/incidents/route.ts",
-    "src/app/api/investigations/[id]/evidence/route.ts", "src/app/api/investigations/[id]/evidence-trace/route.ts", "src/app/api/dev/investigations/[id]/collect-evidence/route.ts", "src/app/api/intelligence/capabilities/route.ts"].map((p) => join(ROOT, p)),
+    "src/app/api/investigations/[id]/evidence/route.ts", "src/app/api/investigations/[id]/evidence-trace/route.ts", "src/app/api/dev/investigations/[id]/collect-evidence/route.ts", "src/app/api/intelligence/capabilities/route.ts",
+    "src/app/api/dev/investigations/[id]/diagnose/route.ts", "src/app/api/investigations/[id]/diagnosis/route.ts"].map((p) => join(ROOT, p)),
 ];
 
 const FORBIDDEN_TOKENS = [
@@ -31,6 +32,8 @@ const ALLOWED_COLLECTION_KEYS = new Set([
   "detectionObservations", "incidents", "monitorRuns", "monitorState", "monitoringWindows", "monitoringJobs", "monitoringWorkers",
   // Evidence retrieval owns these; diagnoses/plans are read (never written) by historical-incident retrieval.
   "evidence", "evidenceCollections", "evidenceToolRuns", "evidenceDetails", "diagnoses", "plans",
+  // The Mubit investigator writes diagnoses and its own model_calls trace.
+  "modelCalls",
 ]);
 
 describe("detector data boundary (code inspection)", () => {
