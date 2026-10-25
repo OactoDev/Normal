@@ -21,6 +21,7 @@
     "planner:work": "node --conditions=react-server --import tsx scripts/planner-worker.ts",
     "investigator:check": "node --conditions=react-server --import tsx scripts/check-mubit.ts",
     "research:check": "node --conditions=react-server --import tsx scripts/check-research.ts",
+    "training:source": "node --conditions=react-server --import tsx scripts/train-source-support.ts",
     "demo:stage5": "node --conditions=react-server --import tsx scripts/demo-stage5.ts"
   },
   "dependencies": {

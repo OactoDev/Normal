@@ -6,6 +6,16 @@ const response = (content: unknown = { ok: true }, headers: Record<string, strin
 beforeEach(() => { vi.stubEnv("MUBIT_API_KEY", "mbt_test"); vi.stubEnv("GEMINI_API_KEY", "google_test"); vi.stubEnv("NORMAL_DIRECT_GEMINI_FALLBACK", "false"); });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe("provider boundaries", () => {
+  it("keeps held-out calls out of training without changing the task", async () => {
+    const mock = vi.fn().mockImplementation(async () => response()); vi.stubGlobal("fetch", mock);
+    const request = { model: "test", system: "stable", input: { sample: "heldout" }, schema };
+    await callModel({ ...request, recording: "metadata" });
+    await callModel({ ...request, recording: "full" });
+    expect(mock.mock.calls[0][1].headers["x-middleware-record"]).toBe("metadata");
+    expect(mock.mock.calls[1][1].headers["x-middleware-record"]).toBe("full");
+    expect(JSON.parse(mock.mock.calls[0][1].body)).toEqual(JSON.parse(mock.mock.calls[1][1].body));
+    expect(promptFingerprint({ ...request, recording: "metadata" }, "source", "1")).toBe(promptFingerprint({ ...request, recording: "full" }, "source", "1"));
+  });
   it("keeps recurring task fingerprints stable across sessions and evidence without unsupported metadata", async () => {
     const first = { model: "test", system: "stable", input: { incident: "one" }, sessionId: "job_one", schema };
     const second = { ...first, input: { incident: "two" }, sessionId: "job_two" };

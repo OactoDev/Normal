@@ -54,6 +54,8 @@ export interface FunctionTool { name: string; description: string; parameters: R
 export interface ModelRequest {
   model: string; system: string; input: unknown; schema?: z.ZodTypeAny; schemaName?: string;
   tools?: FunctionTool[]; forceTool?: string; maxOutputTokens?: number; sessionId?: string;
+  /** Held-out evaluation must use metadata: Mubit then cannot keep the request/answer for training. */
+  recording?: "full" | "metadata" | "off";
 }
 /** Stable task identity, independent of changing evidence, sessions, and model routing. */
 export function promptFingerprint(request: ModelRequest, task: string, version: string): string {
@@ -64,7 +66,7 @@ export function promptFingerprint(request: ModelRequest, task: string, version: 
 export interface ModelResponse { value: unknown; toolCalls: Array<{ id: string; name: string; arguments: unknown }>; metadata: CallMetadata }
 const finite = (x: unknown) => typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : null;
 
-export async function gatewayRequest(route: string, body: unknown, provider: CallMetadata["provider"], model: string, timeoutMs = 60_000): Promise<{ body: Record<string, unknown>; metadata: CallMetadata }> {
+export async function gatewayRequest(route: string, body: unknown, provider: CallMetadata["provider"], model: string, timeoutMs = 60_000, recording?: ModelRequest["recording"]): Promise<{ body: Record<string, unknown>; metadata: CallMetadata }> {
   const config = providerConfig();
   const direct = provider === "google_direct";
   if (direct && (process.env.NORMAL_DIRECT_GEMINI_FALLBACK !== "true" || !process.env.GEMINI_API_KEY)) throw new ProviderError("direct_fallback_disabled", false, false);
@@ -74,7 +76,7 @@ export async function gatewayRequest(route: string, body: unknown, provider: Cal
   let response: Response;
   try {
     response = await fetch(route, { method: "POST", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
-      headers: { "content-type": "application/json", ...(native ? { "x-goog-api-key": key } : { authorization: `Bearer ${key}` }) }, body: JSON.stringify(body) });
+      headers: { "content-type": "application/json", ...(native ? { "x-goog-api-key": key } : { authorization: `Bearer ${key}` }), ...(!direct && recording ? { "x-middleware-record": recording } : {}) }, body: JSON.stringify(body) });
   } catch { throw new ProviderError("transport_or_timeout", false, true, { provider, model, route, latencyMs: Date.now() - started }); }
   const metadata: CallMetadata = { provider, model, route, requestId: response.headers.get("x-middleware-request-id"), providerRequestId: response.headers.get("x-request-id") || response.headers.get("request-id"), latencyMs: Date.now() - started, inputTokens: null, outputTokens: null, totalTokens: null, estimatedCostUsd: null };
   if (!response.ok) {
@@ -107,7 +109,7 @@ export async function callModel(req: ModelRequest): Promise<ModelResponse> {
     max_completion_tokens: req.maxOutputTokens ?? 6000, reasoning_effort: req.tools?.length ? "none" : config.reasoning,
     ...(req.schema ? { response_format: { type: "json_schema", json_schema: { name: req.schemaName || "normal_output", strict: true, schema: jsonSchema(req.schema) } } } : {}),
     ...(req.tools?.length ? { tools: req.tools.map((t) => ({ type: "function", function: { ...t, strict: true } })), tool_choice: req.forceTool ? { type: "function", function: { name: req.forceTool } } : "auto", parallel_tool_calls: false } : {}),
-  }, "mubit", req.model);
+  }, "mubit", req.model, 60_000, req.recording);
   const choices = body.choices as Array<{ finish_reason: string; message: { content?: string; refusal?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }> | undefined;
   const choice = choices?.[0];
   if (!choice || choice.message.refusal || !["stop", "tool_calls"].includes(choice.finish_reason)) throw new ProviderError("incomplete_or_refused", false, false, metadata);
