@@ -86,15 +86,15 @@ We checked the training path and kept the results, including the failure. These 
 | --- | --- | --- |
 | Existing diagnostic adapter, `ad_lane_0026fbd6`, v1 | Mubit displays **Passed**, with 100% teacher agreement on **nine** test cases. No production request path is linked. | Mubit produced and tested an adapter. This is its own small teacher-agreement check, not proof of better diagnosis. |
 | Diagnostic comparison on six new synthetic cases | The available reference matched **6/6** authored primary conclusions; the adapter matched **5/6**. It mistook a tracking problem for checkout failure. | We found a concrete error and did not promote the adapter. The reference was `gemini-3.8-flash`; the original teacher, `gemini-4-argon`, was unavailable. These agent-reviewed counts are not independently adjudicated accuracy. |
-| New source-support pilot, `normal.source_support.v1` | **40/40** collection calls completed. The console at **07:15 UTC, 25 October 2026** showed **0 kept, 40 awaiting review; first training not started**. A separate provider baseline matched **15/24** authored labels. | Collection works; this task has no trained version to compare yet. The 24 held-out cases were excluded from training storage. |
+| New source-support pilot, `normal.source_support.v1` | **40/40** collection calls completed. The console at **07:22 UTC, 25 October 2026** showed **0 kept, 0 rejected, 40 awaiting review; first training not started**. A separate provider baseline matched **15/24** authored labels. | Collection works; this task has no trained version to compare yet. The 24 held-out cases were excluded from training storage. |
 
 ![Mubit diagnostic adapter console showing a passed latest training result and nine teacher-agreement test cases](docs/training/diagnostic-adapter-v1/console/training-result.png)
 
 *Existing diagnostic adapter: the latest training result says Passed. The same console shows no linked production request path. The displayed 100% belongs to Mubit’s nine-case check.*
 
-![Mubit source-support console showing 40 calls, zero kept examples and first training not started](docs/training/source-support-v1/console/review-queue-latest.png)
+![Mubit source-support console showing 40 calls, zero kept examples and first training not started](docs/training/source-support-v1/console/recheck-2026-10-25-0722.jpg)
 
-*New source-support task: all 40 calls are present, but example review is still pending at the recorded time. The sidebar’s three adapters belong to the workspace, not to this task.*
+*Rechecked at 07:22 UTC on 25 October 2026: all 40 calls are present, with 40 reviews queued and 3 running. First training has not started; there is no source-support adapter version to test yet. The sidebar’s three adapters belong to the workspace, not to this task.*
 
 ![Mubit side-by-side comparison showing the reference identifying a tracking problem while the diagnostic adapter selects checkout failure](docs/training/diagnostic-adapter-v1/console/tracking-artifact.png)
 

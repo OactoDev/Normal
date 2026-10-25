@@ -31,9 +31,9 @@ Evidence: [actual replies](training/diagnostic-adapter-v1/results.json), [scored
 
 ## Source-support task is still reviewing examples
 
-Console sign-in now works. Task **Assess whether each supplied** (`ln_fa0a441a893491aa9e57315c`, `gpt-6-luna`) contains all **40 collection calls**. The refreshed console observation recorded **0 kept, 0 rejected, 40 waiting for review**, with **40 queued and 3 running** reviews. **First training: not started.** There is no version of this task to test against its saved 24-case provider baseline yet.
+Console sign-in now works. Task **Assess whether each supplied** (`ln_fa0a441a893491aa9e57315c`, `gpt-6-luna`) contains all **40 collection calls**. The refreshed console observation at **07:22 UTC on 25 October 2026** recorded **0 kept, 0 rejected, 40 waiting for review**, with **40 queued and 3 running** reviews. **First training: not started.** There is no version of this task to test against its saved 24-case provider baseline yet.
 
-The collection and evaluator now preserve that verified console observation, rather than reporting authentication as the blocker. See [source task status](training/source-support-v1/console-status.json), [machine report](training/source-support-v1/report.json), [console capture](training/source-support-v1/console/review-queue-latest.png), and [integration/runbook](training-integration.md). Mubit must finish reviewing and retain enough eligible examples before this task can train. No additional examples were sent merely to bypass the pending queue, and no adapter outputs were invented.
+The collection and evaluator now preserve that verified console observation, rather than reporting authentication as the blocker. See [source task status](training/source-support-v1/console-status.json), [machine report](training/source-support-v1/report.json), [console capture](training/source-support-v1/console/recheck-2026-10-25-0722.jpg), and [integration/runbook](training-integration.md). Mubit must finish reviewing and retain enough eligible examples before this task can train. No additional examples were sent merely to bypass the pending queue, and no adapter outputs were invented.
 
 ## Compatibility with the fetched main
 
