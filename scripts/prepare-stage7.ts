@@ -7,7 +7,8 @@ import {planningContext,contextHash} from '../src/planner/context';
 import {plannerHandoff} from '../src/planner/service';
 import type {Document} from 'mongodb';
 process.loadEnvFile('.env.local');
-const source='stage5_1792885194280',simulationRunId=`stage7_${Date.now()}`;
+const stage8=process.argv.includes('--stage8');
+const source='stage5_1792885194280',simulationRunId=`${stage8?'stage8_':'stage7_'}${Date.now()}`;
 async function main(){
  const db=await getDb();await ensureIndexes(db);
  const names=[COLLECTIONS.simulatorState,COLLECTIONS.simulatedProducts,COLLECTIONS.simulatedCampaigns,COLLECTIONS.simulatedStorefront,COLLECTIONS.simulatedOrders,COLLECTIONS.simulatedShipments,COLLECTIONS.simulatedCustomers,COLLECTIONS.simulatedSessions,COLLECTIONS.businessEvents,COLLECTIONS.metricSnapshots,COLLECTIONS.evidence,COLLECTIONS.evidenceDetails,COLLECTIONS.investigationJobs,COLLECTIONS.investigationReports,COLLECTIONS.diagnoses,COLLECTIONS.investigations,COLLECTIONS.anomalies,COLLECTIONS.planningJobs,COLLECTIONS.plans];
@@ -35,8 +36,8 @@ async function main(){
  await db.collection(COLLECTIONS.plans).updateOne({planId:doc.planId},{$set:{contextHash:hash}});
  await db.collection(COLLECTIONS.planningJobs).updateOne({...scope,jobId:doc.planningJobId},{$set:{contextHash:hash}});
  const handoff=await plannerHandoff(db,{...doc,contextHash:hash});
- mkdirSync('docs/stage7-runs',{recursive:true});
+ mkdirSync(stage8?'docs/stage8-runs':'docs/stage7-runs',{recursive:true});
  const result={...scope,planId:doc.planId,planVersion:doc.planVersion,sourceRun:source,sourcePlanId:originalPlan.planId,sourcePlanHash:digest(originalPlan),label:'Isolated acceptance copy of saved genuine Stage 5/6 report and strategy; no model call',counts:Object.fromEntries(Object.entries(sourceDocs).map(([k,v])=>[k,v.length])),handoff};
- writeFileSync('docs/stage7-runs/acceptance.json',JSON.stringify(result,null,2));console.log(JSON.stringify({simulationRunId,planId:doc.planId,actions:handoff.plan.actions.map(a=>a.params)}));
+ writeFileSync(stage8?'docs/stage8-runs/controlled-preparation.json':'docs/stage7-runs/acceptance.json',JSON.stringify(result,null,2));console.log(JSON.stringify({simulationRunId,planId:doc.planId,actions:handoff.plan.actions.map(a=>a.params)}));
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await (await getMongoClient()).close()});

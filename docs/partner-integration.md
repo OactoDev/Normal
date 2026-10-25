@@ -4,7 +4,8 @@ Audience: developers maintaining the integrated approval UI, orchestration and a
 
 Stage 7 selectively adapts `origin/kris` (`f9bc19d`) into Normal. MongoDB, canonical contracts and the existing
 simulator adapters remain authoritative; the partner D1 backend and independent simulator are not imported.
-See [Stage 7 verification](stage7-verification.md) for recorded results and limitations.
+See [Stage 7 verification](stage7-verification.md) for execution results and
+[Stage 8 verification](stage8-verification.md) for subsequent outcome measurement.
 
 ## What you consume
 
@@ -50,7 +51,8 @@ separately reviewed corrective plan. Execution is synchronous, so process-loss r
 
 The original plan stays immutable. After a successful target mutation, the canonical handoff can correctly fail
 its current-state check. Activity displays the stored reviewed handoff as historical evidence; it does not use that
-snapshot to bypass execution checks. `ActionOutcome` records read-back verification, not measured business impact.
+snapshot to bypass execution checks. `ActionOutcome` records immediate read-back verification. Stage 8 writes
+separate business-outcome assessments from later observations; neither trains a model.
 
 Routes use the existing development/demo gate and same-origin mutation check. Development uses
 `local_demo_human`; configured production demo mode uses `configured_demo_operator` and the demo-key header.
@@ -135,6 +137,6 @@ Product images join by stable reference identity and verified style using `src/r
 cached assets live under `public/assets/products/`. They do not create or override business products.
 `/shopify` preserves the partner synthetic presentation locally and has no operational data connection.
 
-Production identity/RBAC, durable recovery of interrupted executions and measured business-impact evaluation
-remain unfinished. Detection, evidence retrieval, Mubit diagnosis, planning, demo approval and verified simulator
-execution are implemented in this checkout.
+Production identity/RBAC, durable recovery of interrupted executions and causal impact evaluation remain
+unfinished. Detection, evidence retrieval, Mubit diagnosis, planning, demo approval, verified simulator
+execution and observational outcome assessment are implemented in this checkout.

@@ -48,7 +48,9 @@ test("persisted Nike source cards preserve attribution, rejection, links and sco
   try {
     await page.goto(workspace);
     await expect(page.getByTestId("incident-overview")).toContainText("no live AI run");
+    await page.getByTestId("open-signal-details").click();
     await expect(page.getByTestId("executive-brief")).toContainText(report.diagnosis.summary);
+    await page.getByRole("dialog").getByRole("button", { name: "Evidence", exact: true }).click();
     const explorer = page.getByTestId("evidence-explorer");
     await expect(explorer.getByTestId("external-evidence-card")).toHaveCount(2);
     const card = explorer.locator(`[data-source-id="${accepted.sourceId}"]`);
@@ -84,6 +86,7 @@ test("persisted Nike source cards preserve attribution, rejection, links and sco
     await expect(negative).toHaveCount(0);
     await explorer.getByTestId("filter-verification").selectOption("all");
 
+    await page.getByRole("dialog").getByRole("button", { name: "Signal", exact: true }).click();
     const dossier = page.getByTestId("full-report");
     await dossier.locator(":scope > summary").click();
     const external = dossier.locator("section").filter({ has: page.getByRole("heading", { name: "External research", exact: true }) });
@@ -93,12 +96,14 @@ test("persisted Nike source cards preserve attribution, rejection, links and sco
     await expect(external.locator("a.investigation-citation")).toHaveAttribute("href", `#source-${accepted.sourceId}`);
     await external.locator("a.investigation-citation").click();
     await expect(page.locator(":target")).toHaveAttribute("id", `source-${accepted.sourceId}`);
+    await page.getByRole("dialog").getByRole("button", { name: "Signal", exact: true }).click();
     await page.getByTestId("claim-matrix").locator(":scope > summary").click();
     const negativeClaim = page.getByTestId("claim-matrix").locator(".investigation-report-section").filter({ hasText: rejected.proposedClaim });
     await expect(negativeClaim).toContainText("insufficient evidence");
     await expect(negativeClaim.locator("a.investigation-citation")).toHaveAttribute("href", `#source-${rejected.sourceId}`);
     await expect(page.getByTestId("research-sources").locator(":scope > details")).toHaveCount(2);
 
+    await page.getByRole("dialog").getByRole("button", { name: "Evidence", exact: true }).click();
     const originalLink = card.getByRole("link", { name: "Original source" });
     await expect(originalLink).toHaveAttribute("href", accepted.originalUrl);
     await expect(originalLink).toHaveAttribute("rel", "noopener noreferrer");
@@ -116,7 +121,9 @@ test("persisted Nike source cards preserve attribution, rejection, links and sco
 
     const beforeReload = aiReads;
     await page.reload();
+    await page.getByTestId("open-signal-details").click();
     await expect(page.getByTestId("executive-brief")).toContainText(report.diagnosis.summary);
+    await page.getByRole("dialog").getByRole("button", { name: "Evidence", exact: true }).click();
     await expect(explorer.getByTestId("external-evidence-card")).toHaveCount(2);
     expect(aiReads).toBeGreaterThan(beforeReload);
     await page.goto(`/dashboard/investigations/${scope.investigationId}?run=${foreignRun}`);

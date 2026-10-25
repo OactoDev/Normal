@@ -41,7 +41,7 @@ export function PipelineStagePanel({ stage, tools }: { stage: StageCapability; t
             <tbody>{tools.map((t) => <tr key={t.name}><td><code>{t.name}</code></td><td>{t.category}</td><td className="small">{t.description}</td></tr>)}</tbody></table></div>
         ) : null}
         <div className="row">
-          {stage.link ? <Link href={withRun(stage.link)} className="btn sm primary">Open {stage.name === "Observe" ? "control room" : stage.id === "approve" ? "Approvals" : stage.id === "execute" ? "execution activity" : stage.id === "plan" ? "investigations" : "anomaly monitor"}</Link> : null}
+          {stage.link ? <Link href={withRun(stage.link)} className="btn sm primary">Open {stage.name === "Observe" ? "control room" : stage.id === "approve" ? "Approvals" : stage.id === "execute" ? "execution activity" : stage.id === "plan" ? "investigations" : stage.id === "verify" || stage.id === "learn" ? "Outcomes" : "anomaly monitor"}</Link> : null}
           {stage.id === "retrieve" || stage.id === "detect" ? <Link href={withRun("/dashboard")} className="btn sm">Open investigations from the overview</Link> : null}
         </div>
       </div>

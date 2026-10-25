@@ -59,10 +59,10 @@ export async function getCapabilities(input: unknown, dbOverride?: Db) {
       input: "ProposedPlan", output: "PlanApproval", backend: "src/execution; partner PlanReview", link: "/dashboard/approvals", metrics: { plans } },
     { id: "execute", name: "Execute", description: "Agent missions execute approved actions through partner adapters (budget, delay notice, banner) with idempotent receipts.", implemented: true, status: plans ? "operational" : "waiting_for_data",
       summary: "Inspect durable action attempts in Activity; approval and current-state checks required", input: "PlanApproval, ActionProposal", output: "AgentMission, ActionExecution, callback events", backend: "src/execution; src/adapters", link: "/dashboard/activity", metrics: { plans } },
-    { id: "verify", name: "Verify", description: "Before-versus-after measurement of executed actions against success criteria.", implemented: false, status: "not_implemented", summary: "Not implemented",
-      input: "ActionExecution, metric_snapshots", output: "ActionOutcome", backend: "future", link: null, metrics: {} },
-    { id: "learn", name: "Learn", description: "Outcome evaluation, corrections and recurring-task evaluation feeding back into detection and planning.", implemented: false, status: "not_implemented", summary: "Not implemented",
-      input: "ActionOutcome, ModelCorrection", output: "EvaluationResult", backend: "future", link: null, metrics: {} },
+    { id: "verify", name: "Verify", description: "Read-only before/after observation of executed actions, with separate operational and business results.", implemented: true, status: plans ? "operational" : "waiting_for_data", summary: "Evaluate exact approved executions and inspect durable, sourced assessments in Outcomes",
+      input: "Approved ActionExecution, receipts, simulated metric events", output: "BusinessOutcomeAssessment", backend: "src/outcomes; POST /api/outcomes/evaluate", link: "/dashboard/outcomes", metrics: {} },
+    { id: "learn", name: "Learn", description: "Outcome history for human review and future planning context.", implemented: true, status: plans ? "operational" : "waiting_for_data", summary: "Scoped outcome history is available; no model training or automatic planner adaptation is claimed",
+      input: "BusinessOutcomeAssessment", output: "Read-only outcome history", backend: "GET /api/outcomes", link: "/dashboard/outcomes", metrics: {} },
   ];
   return { businessId: q.businessId, simulationRunId: q.simulationRunId ?? null, generatedAt: new Date().toISOString(), detectorVersion: DETECTOR_VERSION, tools, stages };
 }

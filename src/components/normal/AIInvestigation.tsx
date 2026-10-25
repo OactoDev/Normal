@@ -58,14 +58,14 @@ export function AIInvestigation({ investigationId, businessId, simulationRunId, 
     </div></div>
     <div className="card-body" style={{ display: "grid", gap: 16 }}>
       {error ? <div role="alert" className="alert error">{error}</div> : null}
-      {!state ? <p className="muted small">Compare competing explanations using read-only evidence tools. Results and source checks are saved for review.</p> : <div className="small" aria-live="polite" data-testid="ai-progress">
-        <strong>{state.stage.replaceAll("_", " ")}</strong> · {state.hypotheses.length} reasoning rounds · {state.toolCount} tools · {state.evidenceIds.length} evidence records · {state.researchCount} research rounds
-        {state.status === "queued" ? <p className="muted">Waiting for the investigation worker.</p> : null}
+      {!state ? <p className="muted small">Compare explanations against read-only evidence. Sources are saved for review.</p> : <div className="small" aria-live="polite" data-testid="ai-progress">
+        <strong>{state.stage.replaceAll("_", " ")}</strong> · {state.hypotheses.length} rounds · {state.toolCount} tools · {state.evidenceIds.length} records
+        {state.status === "queued" ? <p className="muted">Waiting for the investigator.</p> : null}
         {state.error ? <p className="alert error">{state.error}</p> : null}
         {state.stopReason ? <p className="muted">{state.stopReason}</p> : null}
       </div>}
-      {report ? <div className="investigation-brief" data-testid="executive-brief"><span className="investigation-kicker">Persisted AI executive brief · {state?.status === "failed" ? "provisional after provider failure" : report.insufficientEvidence ? "insufficient evidence" : "validated diagnosis"}</span><h3>{state?.status === "failed" ? "Provider failure: provisional report" : report.insufficientEvidence ? "Insufficient evidence" : "Final diagnosis"}</h3><p>{report.executiveBrief.explanation}</p><p className="muted small">{report.executiveBrief.certainty}</p>
-        <p>{report.executiveBrief.impact}</p>{report.executiveBrief.review.length ? <p className="small">Review: {report.executiveBrief.review.join(" · ")}</p> : null}{report.sections[0]?.evidenceIds.length ? <><div className="investigation-citations">Evidence: {report.sections[0].evidenceIds.map(cite)}</div>{evidenceCards(report.sections[0].evidenceIds)}</> : null}</div> : null}
+      {report ? <div className="investigation-brief" data-testid="executive-brief"><span className="investigation-kicker">{state?.status === "failed" ? "Provisional diagnosis" : report.insufficientEvidence ? "Evidence limited" : "AI diagnosis"}</span><h3>{state?.status === "failed" ? "Provisional report" : report.insufficientEvidence ? "Insufficient evidence" : "Final diagnosis"}</h3><p>{report.executiveBrief.explanation}</p><p className="muted small">Confidence: {report.executiveBrief.certainty}</p>
+        {report.executiveBrief.review.length ? <details><summary>Review notes</summary><p className="small">{report.executiveBrief.review.join(" · ")}</p></details> : null}{report.sections[0]?.evidenceIds.length ? <><div className="investigation-citations">Evidence: {report.sections[0].evidenceIds.map(cite)}</div>{evidenceCards(report.sections[0].evidenceIds)}</> : null}</div> : null}
       {latest ? <div data-testid="hypothesis-comparison"><h4>Hypothesis comparison</h4>{latest.hypotheses.map((h) => <details key={h.hypothesisId} style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
         <summary>{h.cause.replaceAll("_", " ")} · {h.support.replaceAll("_", " ")}</summary><p>{h.explanation}</p><p className="small">Mechanism: {h.mechanism}</p>
         <p className="small">Support: {h.evidenceIds.length ? h.evidenceIds.map(cite) : "None yet"} · Contradictions: {h.counterEvidenceIds.length ? h.counterEvidenceIds.map(cite) : "None recorded"}</p>{evidenceCards([...h.evidenceIds, ...h.counterEvidenceIds])}

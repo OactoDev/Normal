@@ -12,7 +12,9 @@ test("completed investigation generates strategies and saves a non-executed cano
   const exec = promisify(execFile);
   await exec(process.execPath, ["--conditions=react-server", "--import", "tsx", "scripts/demo-stage6.ts", "--prepare"], { timeout: 60_000 });
   await page.goto(`/dashboard/investigations/${investigation}?run=${run}`);
+  await page.getByTestId("open-signal-details").click();
   await expect(page.getByTestId("executive-brief")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Decision / Plan", exact: true }).click();
   const planner = page.getByTestId("solution-planning");
   await planner.scrollIntoViewIfNeeded();
   let view = await (await request.get(endpoint)).json();
@@ -59,6 +61,7 @@ test("completed investigation generates strategies and saves a non-executed cano
   mkdirSync("docs/stage6-runs", { recursive: true });
   await planner.screenshot({ path: "docs/stage6-runs/planning-desktop.png" });
   await page.reload();
+  await page.getByTestId("open-decision-details").click();
   await expect(page.getByTestId("selected-plan")).toContainText(handoff.plan.objective);
   const refreshed = await (await request.get(endpoint)).json();
   expect(refreshed.plan).toEqual(saved.plan); expect(refreshed.calls.length).toBe(saved.calls.length);

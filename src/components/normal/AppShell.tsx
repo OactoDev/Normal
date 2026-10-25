@@ -23,7 +23,7 @@ function Shell({ children, title, hidePageHeading = false }: { children: ReactNo
   return (
     <div className="normal-app">
       <header className="topbar normal-topbar"><div className="shell normal-topbar-inner">
-        <Link href={withRun("/dashboard")} className="normal-brand brand" aria-label={`Normal · ${title}`}><Image className="normal-header-logo" src="/assets/logo.svg" alt="" width={885} height={182} priority /></Link>
+        <Link href={withRun("/dashboard")} className="normal-brand brand" aria-label={`Normal · ${title}`}><Image className="normal-header-logo" src="/assets/Logo.svg" alt="" width={885} height={182} priority /></Link>
         <nav className="normal-nav" aria-label="Normal sections" data-testid="dashboard-nav">
           {NAV.map((n) => {
             const href = withRun(n.href);
@@ -39,7 +39,6 @@ function Shell({ children, title, hidePageHeading = false }: { children: ReactNo
         </div> : null}
         {unavailable ? <div className="alert error">The dashboard uses development/demo endpoints; it is only available in development or a configured demo mode.</div> : null}
         {error ? <div className="alert error">{error}</div> : null}
-        <div className="row small" style={{marginBottom:16}}><Link href={withRun("/ads")}>Meta Ads Manager ↗</Link><Link href={withRun("/demo-store")}>Nike Storefront ↗</Link><Link href="/shopify">Shopify intro demo ↗</Link></div>
         {children}
       </main>
     </div>

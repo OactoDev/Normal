@@ -48,6 +48,8 @@ export const COLLECTIONS = {
   agentMissions: "agent_missions",
   actionExecutions: "action_executions",
   actionOutcomes: "action_outcomes",
+  businessOutcomeAssessments: "business_outcome_assessments",
+  outcomeFeedback: "outcome_feedback",
 } as const;
 
 let indexesReady: Promise<void> | undefined;
@@ -125,6 +127,9 @@ export function ensureIndexes(db?: Db): Promise<void> {
         d.collection(COLLECTIONS.monitoringJobs).createIndex({ businessId: 1, simulationRunId: 1, windowEnd: 1, status: 1 }),
         d.collection(COLLECTIONS.monitoringJobs).createIndex({ status: 1, nextAttemptAt: 1, leaseUntil: 1 }),
         d.collection(COLLECTIONS.monitoringWorkers).createIndex({ workerId: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.businessOutcomeAssessments).createIndex({ assessmentId: 1 }, { unique: true }),
+        d.collection(COLLECTIONS.businessOutcomeAssessments).createIndex({ businessId: 1, simulationRunId: 1, planId: 1, planVersion: 1, actionId: 1, "window.startAt": 1 }, { unique: true }),
+        d.collection(COLLECTIONS.outcomeFeedback).createIndex({ businessId: 1, simulationRunId: 1, assessmentId: 1 }, { unique: true }),
       ]);
     })().catch((error: unknown) => {
       indexesReady = undefined;

@@ -879,7 +879,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
         )}
 
         {/* 3. The Performance Data Table (100% Functional Sorting & Interaction) */}
-        <div className="flex-1 overflow-auto bg-[#e9eaec]">
+        <div className="min-w-0 flex-1 overflow-auto bg-[#e9eaec]">
           {error && (
             <div className="m-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded text-xs">
               {error}
@@ -891,7 +891,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
             <table className="w-full min-w-[1950px] text-left text-[12px] border-collapse table-fixed">
               <thead className="bg-white sticky top-0 z-20 border-y border-[#dcdddf] text-[12px] font-semibold text-[#1c2b33]">
                 <tr className="h-[40px]">
-                  <th className="w-[40px] border-r border-[#e4e6eb] text-center">
+                  <th className="sticky left-0 z-30 w-[40px] border-r border-[#e4e6eb] bg-white text-center">
                     <input
                       type="checkbox"
                       checked={selectedIds.size === filteredCampaigns.length && filteredCampaigns.length > 0}
@@ -903,8 +903,8 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                     />
                   </th>
                   {[
-                    { label: "Off/On", width: "w-[80px]", sort: "status" },
-                    { label: "Campaign", width: "w-[291px]", sort: "name", caret: true },
+                    { label: "Off/On", width: "w-[80px] sticky left-[40px] z-30 bg-white", sort: "status" },
+                    { label: "Campaign", width: "w-[291px] sticky left-[120px] z-30 bg-white", sort: "name", caret: true },
                     { label: "Delivery", width: "w-[135px]", sort: "delivery", caret: true, active: true },
                     { label: "Actions", width: "w-[169px]", caret: true },
                     { label: "Attribution setting", width: "w-[102px]", caret: true, wrap: true },
@@ -962,6 +962,9 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                   filteredCampaigns.map((camp) => {
                     const isChecked = selectedIds.has(camp.id);
                     const isToggleOn = campaignToggles[camp.id] ?? true;
+                    const pinnedRowBackground = isChecked || camp.id === campaignId
+                      ? "bg-blue-50/50"
+                      : "bg-[#e9eaec] group-hover:bg-[#f2f4f8]";
 
 
                     return (
@@ -973,7 +976,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                         }`}
                       >
                         {/* Checkbox */}
-                        <td className="px-2 py-2 text-center border-r border-[#e4e6eb]">
+                        <td className={`sticky left-0 z-10 px-2 py-2 text-center border-r border-[#e4e6eb] ${pinnedRowBackground}`}>
                           <input
                             type="checkbox"
                             checked={isChecked}
@@ -983,7 +986,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                         </td>
 
                         {/* On/Off Toggle */}
-                        <td className="px-2 py-2 border-r border-[#e4e6eb]">
+                        <td className={`sticky left-[40px] z-10 px-2 py-2 border-r border-[#e4e6eb] ${pinnedRowBackground}`}>
                           <button
                             disabled title="Status changes are not supported"
                             className={`w-8 h-4 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
@@ -999,7 +1002,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                         </td>
 
                         {/* Campaign Name */}
-                        <td className="px-2 py-2 border-r border-[#e4e6eb] font-medium text-[#1c1e21]">
+                        <td className={`sticky left-[120px] z-10 px-2 py-2 border-r border-[#e4e6eb] font-medium text-[#1c1e21] ${pinnedRowBackground}`}>
                           <span
                             onClick={() => {
                               router.push(withRun(`/dashboard/campaigns/${encodeURIComponent(camp.id)}`));
@@ -1062,7 +1065,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                         <td className="px-2 py-2 text-right border-r">{money(camp.conversionValue,'GBP')}</td>
                         <td className="px-2 py-2 text-right border-r">{camp.amountSpent?`${camp.roas.toFixed(2)}×`:'—'}</td>
                         {/* Approved budget is always read from MongoDB. */}
-                        <td className="px-2 py-2 text-right font-medium text-[#1c1e21] sticky right-0 bg-white"><button onClick={openApprovals} title="Review budget changes in Approvals" className="text-[#0064e0] font-semibold">{money(camp.budgetMinor, "GBP")} / day</button></td>
+                        <td className="px-2 py-2 text-right font-medium text-[#1c1e21] sticky right-0 z-10 bg-white"><button onClick={openApprovals} title="Review budget changes in Approvals" className="text-[#0064e0] font-semibold">{money(camp.budgetMinor, "GBP")} / day</button></td>
                       </tr>
                     );
                   })

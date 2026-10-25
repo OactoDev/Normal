@@ -51,7 +51,7 @@ export function EvidenceExplorer({ items, total, simulationRunId, externalSource
     && (role === "support" ? supportsPublicClaim(source) : roleMatches(source.sourceId) || (role === "contradiction" && source.claimSupport === "contradictory")));
   return (
     <div className="card" data-testid="evidence-explorer">
-      <div className="card-head"><h3>Evidence explorer</h3><span>{total} canonical records · {externalSources.length} public sources · {shown.length + shownExternal.length} shown</span></div>
+      <div className="card-head"><h3>Evidence</h3><span>{shown.length + shownExternal.length} shown · {total + externalSources.length} total</span></div>
       <div className="card-body row" style={{ flexWrap: "wrap" }}>
         <label className="small">Source <select className="select" value={sourceType} onChange={(e) => setSourceType(e.target.value)} data-testid="filter-source"><option value="all">all</option><option value="internal">internal</option><option value="external">external</option></select></label>
         <label className="small">Verification <select className="select" value={verification} onChange={(e) => setVerification(e.target.value)} data-testid="filter-verification"><option value="all">all</option><option value="verified">verified</option><option value="unverified">unverified / rejected</option></select></label>
@@ -63,7 +63,9 @@ export function EvidenceExplorer({ items, total, simulationRunId, externalSource
       <div className="card-body" style={{ display: "grid", gap: 8 }}>
         {items.length === 0 && externalSources.length === 0 ? <div className="empty" data-testid="evidence-empty">No evidence collected yet. Use “Collect evidence” to run the deterministic retrieval policy.</div> : null}
         {items.length + externalSources.length > 0 && shown.length + shownExternal.length === 0 ? <div className="muted small">No evidence matches the filters.</div> : null}
-        {shownExternal.map((source) => <ExternalEvidenceCard key={source.sourceId} source={source} />)}
+        {shownExternal.length ? <h4 className="small muted">External sources</h4> : null}
+        {shownExternal.map((source) => <div key={source.sourceId} id={`source-${source.sourceId}`}><ExternalEvidenceCard source={source} /></div>)}
+        {shownExternal.length && shown.length ? <h4 className="small muted">Internal records</h4> : null}
         {shown.map((i) => {
           const e = i.evidence, isOpen = open === e.evidenceId;
           return (

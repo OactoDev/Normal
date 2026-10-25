@@ -70,7 +70,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await page.getByTestId("dashboard-run-select").selectOption(RUN);
     await page.locator(`a[href="/dashboard/investigations/${investigationId}?run=${RUN}"]`).first().click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}`));
-    await expect(page.getByTestId("incident-overview")).toContainText(investigationId);
+    await expect(page.getByTestId("incident-overview")).toHaveAttribute("data-investigation-id", investigationId);
   });
 
   test("overview shows skeletons during data retrieval and keeps campaigns in the responsive layout", async ({ page, isMobile }) => {
@@ -146,12 +146,12 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(open).toHaveAttribute("href", new RegExp(`run=${RUN}$`));
     await open.click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}`));
-    await expect(page.getByTestId("incident-overview")).toContainText(investigationId);
+    await expect(page.getByTestId("incident-overview")).toHaveAttribute("data-investigation-id", investigationId);
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`/dashboard\\?run=${RUN}`));
     await expect(selector).toHaveValue(RUN);
     await page.goForward();
-    await expect(page.getByTestId("incident-overview")).toContainText(investigationId);
+    await expect(page.getByTestId("incident-overview")).toHaveAttribute("data-investigation-id", investigationId);
   });
 
   test("signals consolidate persisted incident observations, expand exact evidence and preserve investigation navigation", async ({ page, request }) => {
@@ -163,22 +163,25 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     expect(group.observationCount).toBeGreaterThan(1);
 
     await page.goto(`/dashboard/signals?run=${RUN}`);
-    const card = page.getByTestId("signal-group").filter({ has: page.locator(".signal-investigation-link") }).filter({ hasText: group.incidentTitle ?? group.title }).first();
+    const card = page.getByTestId("signal-group").filter({ has: page.locator(`a[href*="/dashboard/investigations/${investigationId}"]`) }).first();
     await expect(card).toBeVisible();
     await expect(card.getByTestId("signal-investigation-link")).toHaveAttribute("href", new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}$`));
-    await card.getByRole("button", { name: "Expand observations" }).click();
-    await expect(card.getByTestId("signal-observation")).toHaveCount(group.observationCount);
-    const aggregate = group.observations.find((item: { isBusinessAggregate: boolean }) => item.isBusinessAggregate);
-    if (aggregate) {
-      await card.getByTestId("signal-observation").filter({ hasText: "Whole business" }).click();
-      await expect(page.locator(".signal-detail-context")).toContainText("Whole business");
-    }
+    await card.getByRole("button", { name: "View details", exact: true }).click();
+    const drawer = page.getByTestId("signal-drawer");
+    await expect(drawer).toBeVisible();
+    const related = groups.items.filter((item: { incidentId: string | null }) => item.incidentId === group.incidentId);
+    const expectedCount = new Set(related.flatMap((item: { observations: Array<{ anomalyId: string; isBusinessAggregate: boolean }> }) => item.observations.filter((observation) => !observation.isBusinessAggregate).map((observation) => observation.anomalyId))).size;
+    if (expectedCount > 4) await drawer.getByRole("button", { name: /Show all/ }).click();
+    await expect(drawer.getByTestId("signal-observation")).toHaveCount(expectedCount);
+    await expect(drawer.locator(".inbox-drawer-metrics")).toContainText("Current");
+    await drawer.getByRole("button", { name: "Close details" }).click();
+    await expect(drawer).toHaveCount(0);
     await card.getByTestId("signal-investigation-link").click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}$`));
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`/dashboard/signals\\?run=${RUN}$`));
     await page.goForward();
-    await expect(page.getByTestId("incident-overview")).toContainText(investigationId);
+    await expect(page.getByTestId("incident-overview")).toHaveAttribute("data-investigation-id", investigationId);
     const viewportWidth = await page.evaluate(() => window.innerWidth);
     const documentWidth = await page.locator("html").evaluate((element) => element.scrollWidth);
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth + 1);
@@ -214,13 +217,16 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     test.setTimeout(240_000);
     await page.goto(`/dashboard/investigations/${investigationId}?run=${RUN}`);
     await expect(page.getByTestId("incident-overview")).toContainText("Advertising performance deterioration");
+    await page.getByTestId("open-signal-details").click();
     await expect(page.getByTestId("related-anomalies").locator("tbody tr")).toHaveCount((await (await request.get(`/api/investigations/${investigationId}?simulationRunId=${RUN}`)).json()).anomalies.length);
-    await expect(page.getByTestId("evidence-empty")).toBeVisible();
     await expect(page.getByTestId("start-ai")).toBeEnabled();
+    await expect(page.getByTestId("ai-investigation")).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Decision / Plan", exact: true }).click();
     await expect(page.getByTestId("generate-plan")).toBeDisabled();
     await expect(page.getByTestId("planning-blocked")).toContainText("saved Stage 5 report");
-    await expect(page.getByTestId("ai-investigation")).toBeVisible();
     await expect(page.getByTestId("execution-intake").getByRole("link", { name: "Open Approvals" })).toHaveAttribute("href", `/dashboard/approvals?run=${RUN}`);
+    await page.getByRole("dialog").getByRole("button", { name: "Evidence", exact: true }).click();
+    await expect(page.getByTestId("evidence-empty")).toBeVisible();
 
     await page.getByTestId("collect-evidence").click();
     await expect(page.getByTestId("collection-summary")).toContainText("Status completed", { timeout: 90_000 });
@@ -230,6 +236,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     const api = await (await request.get(`/api/investigations/${investigationId}/evidence?simulationRunId=${RUN}&limit=100`)).json();
     expect(api.total).toBeGreaterThanOrEqual(4);
     await expect(page.getByTestId("evidence-item")).toHaveCount(api.total);
+    await page.getByRole("dialog").locator("summary").filter({ hasText: "Evidence collection and tool timeline" }).click();
     await expect(page.locator('[data-testid="tool-run"][data-status="completed"]').first()).toBeVisible();
     await expect(page.getByTestId("tool-run")).toHaveCount(api.latestCollection.selectedTools.length);
 
@@ -263,19 +270,23 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     expect(refreshed.items.map((i: { evidence: { evidenceId: string } }) => i.evidence.evidenceId).sort()).toEqual(api.items.map((i: { evidence: { evidenceId: string } }) => i.evidence.evidenceId).sort());
     expect(refreshed.total).toBe(api.total);
     await page.reload();
+    await page.getByTestId("open-evidence-details").click();
     await expect(page.getByTestId("evidence-item")).toHaveCount(api.total);
     await expect(page.getByTestId("collection-summary")).toContainText("Status completed");
 
     // Another run must not see this investigation or its evidence.
+    await page.getByRole("button", { name: "Close details" }).click();
     await page.getByTestId("dashboard-run-select").selectOption(OTHER);
     await expect(page.getByTestId("investigation-not-found")).toBeVisible();
     expect((await request.get(`/api/investigations/${investigationId}/evidence?simulationRunId=${OTHER}`)).status()).toBe(404);
     await page.getByTestId("dashboard-run-select").selectOption(RUN);
+    await page.getByTestId("open-evidence-details").click();
     await expect(page.getByTestId("evidence-item")).toHaveCount(api.total);
   });
   test("AI investigation queues idempotently, survives refresh, and can be cancelled without a browser worker", async ({ page, request }) => {
     const endpoint = `/api/investigations/${investigationId}/ai?simulationRunId=${RUN}`;
     await page.goto(`/dashboard/investigations/${investigationId}?run=${RUN}`);
+    await page.getByTestId("open-signal-details").click();
     await expect(page.getByTestId("start-ai")).toBeEnabled();
     await page.getByTestId("start-ai").click();
     await expect(page.getByTestId("ai-status")).toHaveText("queued");
@@ -284,6 +295,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     expect(duplicate.state.jobId).toBe(first.state.jobId);
     expect(first.calls).toEqual([]);
     await page.reload();
+    await page.getByTestId("open-signal-details").click();
     await expect(page.getByTestId("ai-status")).toHaveText("queued");
     await page.getByTestId("cancel-ai").click();
     await expect(page.getByTestId("ai-status")).toHaveText("cancelled");

@@ -6,7 +6,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { money, moneyCompact, num, virtualDate } from "@/lib/format";
 import { api, q, type AnomalyRow, type IncidentRow, type InvestigationRow, type MonitorStatus } from "./api";
 import { useRun } from "./run-context";
-import { NormalLogo } from "./NormalLogo";
 import { PageSkeleton } from "./PageSkeleton";
 
 interface Campaign {
@@ -50,10 +49,10 @@ function Gauge({ score }: { score: number | null }) {
   );
 }
 
-function SignalRow({ signal, withRun }: { signal: Signal; withRun: (href: string) => string }) {
+function SignalRow({ signal, withRun, direction }: { signal: Signal; withRun: (href: string) => string; direction: "next" | "previous" }) {
   const [open, setOpen] = useState(false);
   return (
-    <li className="signal-item" data-testid={signal.testId}>
+    <li className={`signal-item signal-carousel-enter-${direction}`} data-testid={signal.testId}>
       <div className="signal-row">
         <Trend direction="down" color={signal.level === "high" ? "red" : "green"} size={20} />
         <div className="signal-text"><span className="signal-title">{signal.title}</span><span className="signal-detail">{signal.detail}</span></div>
@@ -62,6 +61,37 @@ function SignalRow({ signal, withRun }: { signal: Signal; withRun: (href: string
       </div>
       {open ? <p className="evidence" id={`signal-evidence-${signal.id}`} role="note">{signal.evidence}</p> : null}
     </li>
+  );
+}
+
+function SignalCarousel({ signals, withRun }: { signals: Signal[]; withRun: (href: string) => string }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [direction, setDirection] = useState<"next" | "previous">("next");
+  const [slideRevision, setSlideRevision] = useState(0);
+  if (signals.length === 0) return <p className="panel-note">No incident or anomaly signals are recorded for this run.</p>;
+
+  const index = activeIndex % signals.length;
+  const changeSignal = (step: -1 | 1) => {
+    setDirection(step > 0 ? "next" : "previous");
+    setActiveIndex((current) => (Math.min(current, signals.length - 1) + step + signals.length) % signals.length);
+    setSlideRevision((current) => current + 1);
+  };
+
+  return (
+    <div className="signal-carousel" role="group" aria-roledescription="carousel" aria-label="Recent signals">
+      <button className="signal-carousel-arrow" type="button" onClick={() => changeSignal(-1)} disabled={signals.length < 2} aria-label="Previous signal">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.5 4.5-5 5.5 5 5.5" /></svg>
+      </button>
+      <div className="signal-carousel-content">
+        <ul className="signal-carousel-stage" aria-live="polite">
+          <SignalRow key={`${signals[index].id}-${slideRevision}`} signal={signals[index]} withRun={withRun} direction={direction} />
+        </ul>
+        <span className="signal-carousel-count">{index + 1} / {signals.length}</span>
+      </div>
+      <button className="signal-carousel-arrow" type="button" onClick={() => changeSignal(1)} disabled={signals.length < 2} aria-label="Next signal">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.5 5 5.5-5 5.5" /></svg>
+      </button>
+    </div>
   );
 }
 
@@ -187,7 +217,7 @@ export function OperationsOverview() {
         <section className="right-column top-column">
           <article className="card signals-card top-signals-card" data-testid="overview-signals">
             <div className="signals-head"><h2>Signals</h2><div className="signals-actions"><span className="attention">{anomalies.total} alerts</span><Link href={withRun("/dashboard/signals")} className="signals-more">View all</Link></div></div>
-            {signalRows.length ? <ul className="signal-list" aria-label="Recent signals" tabIndex={0}>{signalRows.slice(0, 3).map((signal) => <SignalRow key={signal.id} signal={signal} withRun={withRun} />)}</ul> : <p className="panel-note">No incident or anomaly signals are recorded for this run.</p>}
+            <SignalCarousel signals={signalRows} withRun={withRun} />
           </article>
         </section>
 
@@ -206,7 +236,7 @@ export function OperationsOverview() {
           <article className="card activity-card" data-testid="overview-activity" id="activity">
             <div className="activity-head"><h2>Normal Activity</h2><span>{activity.length} updates</span></div>
             <ol aria-label="Recent activity" tabIndex={0}>{activity.map((item) => <li key={item.title}><strong>{item.title}</strong><span>{item.detail}</span></li>)}</ol>
-            <div className="activity-logo"><NormalLogo compact /></div>
+            <div className="activity-logo"><Image className="activity-logo-icon" src="/assets/Icon.svg" alt="Normal" width={141} height={140} /></div>
           </article>
           <CampaignCarousel campaigns={state.campaigns ?? []} metrics={breakdown.campaigns ?? []} withRun={withRun} />
         </section>
