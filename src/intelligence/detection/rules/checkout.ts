@@ -17,14 +17,14 @@ export const CHECKOUT_SIGNALS: SignalDef[] = [
     impactPerDay: rateImpact(),
   },
   {
-    id: "checkout_failure_rate", label: "Checkout failure rate", family: "checkout", theme: "conversion", kind: "rate", unit: "rate",
+    id: "checkout_failure_rate", label: "Checkout failure rate", family: "checkout", theme: "conversion", kind: "rate", unit: "rate", canonicalMetric: "checkout_failure_rate",
     segmentKinds: ["global"], windows: [12, 24], measure: ratio("checkoutFailures", ["orders", "checkoutFailures"]),
     minCurrent: { 12: 10, 24: 20 }, minBaselineDenominator: { 12: 30, 24: 60 }, minNumerator: 4,
     triggers: [{ direction: "increase", polarity: "negative", minRelChange: 1.0, minZ: 3, minAbsChange: { 12: 0.06, 24: 0.05 } }],
     impactPerDay: rateImpact(),
   },
   {
-    id: "coupon_failure_rate", label: "Promo-code checkout failure rate", family: "checkout", theme: "conversion", kind: "rate", unit: "rate",
+    id: "coupon_failure_rate", label: "Promo-code checkout failure rate", family: "checkout", theme: "conversion", kind: "rate", unit: "rate", canonicalMetric: "coupon_failure_rate",
     segmentKinds: ["global"], windows: [12, 24], measure: ratio("couponFailures", ["orders", "checkoutFailures"]),
     minCurrent: { 12: 10, 24: 20 }, minBaselineDenominator: { 12: 30, 24: 60 }, minNumerator: 4,
     triggers: [{ direction: "increase", polarity: "negative", minRelChange: 1.0, minZ: 3, minAbsChange: { 12: 0.05, 24: 0.04 } }],

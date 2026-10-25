@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { api, q, STATUS_LABEL, statusClass, type Capabilities, type StageCapability } from "./api";
 import { useRun } from "./run-context";
 import { PipelineStagePanel } from "./PipelineStagePanel";
+import { PageSkeleton } from "./PageSkeleton";
 
 /** Clickable Observe → … → Learn pipeline. Statuses come from /api/intelligence/capabilities (measured data + implementation metadata). */
 export function ProcessFlow() {
@@ -27,7 +28,7 @@ export function ProcessFlow() {
   const pick = (id: string) => { const next = new URLSearchParams(params.toString()); next.set("stage", id); router.replace(`${pathname}?${next.toString()}`); };
   const current = result && result.runId === runId ? result : null;
   if (current?.error) return <div className="alert error">{current.error}</div>;
-  if (!current?.caps) return <div className="muted">Measuring pipeline readiness…</div>;
+  if (!current?.caps) return <PageSkeleton variant="pipeline" label="Loading pipeline readiness" />;
   const caps = current.caps;
   const stage: StageCapability | undefined = caps.stages.find((s) => s.id === selectedStage) ?? caps.stages[0];
   return (

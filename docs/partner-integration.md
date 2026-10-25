@@ -5,9 +5,19 @@ Audience: the developer building Normal's approval UI, orchestration and agent e
 ## What you consume
 
 - `GET /api/plans/:id` → canonical `PlanHandoff` `{ plan, diagnosis, evidence }` validated with `@normal/contracts`
-  before it is returned. Until the intelligence stage produces real plans, run
-  `POST /api/dev/plans/seed-fixture` (development only) to load `packages/contracts/examples/plan-handoff.json`
-  and exercise `GET /api/plans/plan_001`.
+  before it is returned. Stage 6 now produces real persisted proposals from completed investigations.
+  Use `?businessId=...&simulationRunId=...&planVersion=...` for the exact reviewed version. The legacy
+  `POST /api/dev/plans/seed-fixture` remains available for the canonical example.
+- `GET /api/investigations/:id/planning?businessId=...&simulationRunId=...` exposes strategy comparison,
+  validation checks, current-state preconditions and version history. `POST` with `{ "action": "submit" }`
+  prepares the selected plan as `awaiting_approval`; it does **not** approve, execute, or send to an absent partner intake.
+  Approval intake is still pending. Run `npm run planner:work` to process queued strategy-generation jobs.
+- Planner handoffs reject expired plans, changed diagnoses/targets and altered action parameters. Canonical action
+  rationales include execution preconditions, rollback and partial-failure guidance; plan summaries retain risks and
+  uncertainty without extending the shared schema. Your executor must recheck these conditions after approval,
+  enforce permissions, and pass the **explicit source `simulationRunId`** to every adapter. Never substitute the
+  active storefront run. Notices are limited to unnotified, unshipped delayed orders because the existing default
+  template promises an update on shipping; other messaging requires an appropriate partner-owned template.
 - The simulated business state, through the **adapter service functions** below. They are the only supported
   way to read or change the twin from your module. There is deliberately **no public HTTP mutation route** for
   them: expose them behind your own authenticated, approval-checked route.
@@ -78,5 +88,5 @@ Product IDs are listed in `src/simulator/catalogue.ts` (e.g. `nk_pegasus_42`, `n
 
 ## What is NOT provided here (yours or the intelligence stage's)
 
-Approval UI, `PlanApproval` validation, mission orchestration, `ActionExecution`/`ActionOutcome` persistence,
-anomaly detection, evidence retrieval, Mubit diagnosis and plan generation.
+Approval UI, mission orchestration, and `ActionExecution`/`ActionOutcome` persistence remain partner-owned.
+Detection, evidence retrieval, Mubit diagnosis and solution planning are implemented in this checkout.

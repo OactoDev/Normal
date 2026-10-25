@@ -165,7 +165,11 @@ export function describeFinding(def: SignalDef, f: FindingDraft, ev: StoredEvalu
 async function ensureSnapshots(ctx: Ctx, windows: Array<{ startAt: string; endAt: string; dimension: Record<string, string | undefined> }>, counter: PersistSummary["snapshots"]): Promise<string[]> {
   const ids = windows.map((w) => snapshotId({ businessId: ctx.businessId, simulationRunId: ctx.simulationRunId, dimension: w.dimension }, w.startAt, w.endAt));
   const col = ctx.db.collection<MetricSnapshotT & { simulationRunId: string }>(COLLECTIONS.metricSnapshots);
-  const existing = new Set((await col.find({ businessId: ctx.businessId, snapshotId: { $in: ids } }, { projection: { snapshotId: 1 } }).toArray()).map((d) => d.snapshotId));
+  const found = await col.find({ businessId: ctx.businessId, snapshotId: { $in: ids } }, { projection: { snapshotId: 1, rates: 1 } }).toArray();
+  // Existing v1 snapshots may predate checkout rates. Refresh global windows before a new canonical
+  // checkout anomaly cites them; their stable IDs and source event windows remain unchanged.
+  const existing = new Set(found.filter((d) => d.rates?.checkoutFailureRate !== undefined && d.rates?.couponFailureRate !== undefined).map((d) => d.snapshotId));
+  for (let i = 0; i < windows.length; i++) if (Object.values(windows[i].dimension).some(Boolean) && found.some((d) => d.snapshotId === ids[i])) existing.add(ids[i]);
   const missing = windows.filter((_, i) => !existing.has(ids[i]));
   counter.reused += windows.length - missing.length;
   for (let i = 0; i < missing.length; i += 4) {
@@ -306,7 +310,7 @@ export async function persistDetection(ctx: Ctx, run: DetectionRun, drafts: Inci
     const nonCanonical = [...new Set(memberDocs.filter((d) => !d.anomalyId).map((d) => d.signalId))];
     const policy = !draft.active ? { qualifies: false, reason: "incident already resolved" }
       : !sevOk ? { qualifies: false, reason: `severity ${draft.severity.level} below ${config.investigationMinSeverity}: monitoring only` }
-      : !canonicalActive ? { qualifies: false, reason: `no canonical Anomaly metric covers ${nonCanonical.join(", ")}; see docs/anomaly-detection.md "Contract gap"` }
+      : !canonicalActive ? { qualifies: false, reason: `no canonical Anomaly metric covers ${nonCanonical.join(", ")}` }
       : { qualifies: true, reason: `severity ${draft.severity.level} with ${anomalyIds.length} canonical anomal${anomalyIds.length === 1 ? "y" : "ies"}` };
 
     let investigationId = target?.investigationId ?? null;

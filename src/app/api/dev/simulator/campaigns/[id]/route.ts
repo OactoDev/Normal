@@ -23,30 +23,34 @@ export async function GET(request: Request, ctx: RouteContext<"/api/dev/simulato
     const summary = await getRunSummary(businessId, url.searchParams.get("simulationRunId"));
     const simulationRunId = summary.run.simulationRunId;
     const db = await getDb();
+    const requestedDays = Number(url.searchParams.get("days") ?? 30);
+    const rangeDays = [7, 14, 30].includes(requestedDays) ? requestedDays : 30;
     const [campaign, campaigns] = await Promise.all([
       readCampaign({ businessId, simulationRunId, db }, id),
       readCampaigns({ businessId, simulationRunId, db }),
     ]);
     if (!campaign) return apiError("campaign_not_found", `Campaign ${id} not found in run ${simulationRunId}`, 404);
+    const campaignIds = campaigns.map((item) => item.campaignId);
 
     const endAt = summary.run.virtualTime;
-    const startAt = new Date(Math.max(Date.parse(summary.virtualStartAt), Date.parse(endAt) - 30 * 86_400_000)).toISOString();
-    const [daily, performance, events, receipts] = await Promise.all([
-      Date.parse(endAt) > Date.parse(startAt)
-        ? computeSnapshots({ businessId, simulationRunId, startAt, endAt, bucket: "day", dimension: { campaignId: id }, virtualTime: endAt }, db)
-        : Promise.resolve([]),
+    const startAt = new Date(Math.max(Date.parse(summary.virtualStartAt), Date.parse(endAt) - rangeDays * 86_400_000)).toISOString();
+    const [performance, campaignDailyRows, events, receipts] = await Promise.all([
       Date.parse(endAt) > Date.parse(startAt)
         ? campaignBreakdown(businessId, simulationRunId, startAt, endAt, db)
         : Promise.resolve([]),
+      Promise.all(campaignIds.map(async (campaignId) => [campaignId, Date.parse(endAt) > Date.parse(startAt)
+        ? await computeSnapshots({ businessId, simulationRunId, startAt, endAt, bucket: "day", dimension: { campaignId }, virtualTime: endAt }, db)
+        : []] as const)),
       db.collection<BudgetUpdateEvent>(COLLECTIONS.businessEvents).find({
-        businessId, simulationRunId, type: "campaign.budget_updated", "payload.campaignId": id,
+        businessId, simulationRunId, type: "campaign.budget_updated", "payload.campaignId": { $in: campaignIds },
       }, { projection: { _id: 0 } }).sort({ occurredAt: -1 }).limit(50).toArray(),
       db.collection<ActionReceipt>(COLLECTIONS.actionReceipts).find({
-        businessId, simulationRunId, affectedEntityIds: id, toolName: "ads.set_daily_budget",
+        businessId, simulationRunId, affectedEntityIds: { $in: campaignIds }, toolName: "ads.set_daily_budget",
       }, { projection: { _id: 0, businessId: 1, simulationRunId: 1, actionId: 1, toolName: 1, emittedEventIds: 1, affectedEntityIds: 1, verification: 1, recordedAt: 1 } }).sort({ recordedAt: -1 }).limit(50).toArray(),
     ]);
 
     const actionIds = [...new Set(receipts.map((receipt) => receipt.actionId))];
+    const daily = campaignDailyRows.find(([campaignId]) => campaignId === id)?.[1] ?? [];
     const planDocs = actionIds.length ? await db.collection<ProposedPlanT>(COLLECTIONS.plans).find({
       businessId, "actions.actionId": { $in: actionIds },
     }, { projection: { _id: 0 } }).limit(50).toArray() : [];
@@ -64,6 +68,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/dev/simulato
       const proposal = actionById.get(receipt.actionId);
       return {
         actionId: receipt.actionId,
+        campaignId: event?.payload.campaignId ?? receipt.affectedEntityIds[0] ?? "",
         toolName: receipt.toolName,
         recordedAt: receipt.recordedAt,
         verification: receipt.verification,
@@ -79,7 +84,11 @@ export async function GET(request: Request, ctx: RouteContext<"/api/dev/simulato
     return Response.json({
       simulationRunId, window: { startAt, endAt }, campaign, campaigns,
       performance: performance.find((row) => row.campaignId === id) ?? null,
-      daily, actions: receiptActions,
+      campaignPerformance: performance,
+      daily,
+      campaignDaily: Object.fromEntries(campaignDailyRows),
+      actions: receiptActions.filter((action) => action.campaignId === id),
+      allActions: receiptActions,
     });
   } catch (error) {
     return handleRouteError(error, "simulator/campaign-detail");

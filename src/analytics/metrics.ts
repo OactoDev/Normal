@@ -24,9 +24,12 @@ import type { SimulatedOrder, SimulatedProduct } from "@/types/domain";
  * - delayedShipments    members of that cohort NOT delivered on or before their promise: still open past the
  *                       promise, delivered late, or lost. Once a promise has passed this classification is final.
  * - reviews / lowRatingReviews  count of review.created, and those with rating <= 2
+ * - checkoutFailures / couponFailures  count of checkout.failed, and those with failureCode=coupon_rejected;
+ *                       only the global snapshot reports these because the detector's checkout signals are global
  * - conversionRate = orders/sessions · ctr = clicks/impressions · lateDeliveryRate = delayedShipments/shipments
  *   lowRatingRate = lowRatingReviews/reviews · costPerAcquisitionMinor = round(adSpend/attributedOrders)
- *   (each null when its denominator is 0)
+ *   checkoutFailureRate = checkoutFailures/(orders+checkoutFailures), couponFailureRate =
+ *   couponFailures/(orders+checkoutFailures) (each null when its denominator is 0)
  */
 
 export const MetricsDimension = z.object({
@@ -51,10 +54,10 @@ export interface MetricsQuery {
   virtualTime: string;
 }
 
-type Counters = MetricSnapshotT["counters"];
+type Counters = MetricSnapshotT["counters"] & { checkoutFailures: number; couponFailures: number };
 const zeroCounters = (): Counters => ({
   sessions: 0, orders: 0, revenueMinor: 0, refundMinor: 0, adSpendMinor: 0, impressions: 0, clicks: 0,
-  attributedOrders: 0, shipments: 0, delayedShipments: 0, reviews: 0, lowRatingReviews: 0,
+  attributedOrders: 0, shipments: 0, delayedShipments: 0, reviews: 0, lowRatingReviews: 0, checkoutFailures: 0, couponFailures: 0,
 });
 
 function ratio(n: number, d: number): number | null {
@@ -121,6 +124,11 @@ export async function computeSnapshots(q: MetricsQuery, dbOverride?: Db): Promis
   const adsApplicable = !dim.productId && !dim.channel && !dim.device;
 
   const reviewApplicable = !dim.campaignId && !dim.channel && !dim.device;
+  const checkoutApplicable = !dim.campaignId && !dim.productId && !dim.channel && !dim.device;
+  const checkoutPipeline: Document[] = checkoutApplicable ? [
+    { $match: { type: "checkout.failed" } },
+    { $group: { _id: b, checkoutFailures: { $sum: 1 }, couponFailures: { $sum: { $cond: [{ $eq: ["$payload.failureCode", "coupon_rejected"] }, 1, 0] } } } },
+  ] : [{ $match: { _id: null } }];
   const reviewPipeline: Document[] = reviewApplicable ? [
     { $match: { type: "review.created", ...(dim.productId ? { "payload.productId": dim.productId } : {}) } },
     { $group: { _id: b, reviews: { $sum: 1 }, lowRatingReviews: { $sum: { $cond: [{ $lte: ["$payload.rating", 2] }, 1, 0] } } } },
@@ -130,7 +138,7 @@ export async function computeSnapshots(q: MetricsQuery, dbOverride?: Db): Promis
     { $match: base },
     { $facet: {
       sessions: [{ $match: sessionMatch }, { $group: { _id: b, sessions: { $sum: 1 } } }],
-      orders: orderPipeline, refunds: refundPipeline, reviews: reviewPipeline,
+      orders: orderPipeline, refunds: refundPipeline, reviews: reviewPipeline, checkout: checkoutPipeline,
     } },
   ], { allowDiskUse: true }).toArray();
 
@@ -148,12 +156,14 @@ export async function computeSnapshots(q: MetricsQuery, dbOverride?: Db): Promis
   if (adsApplicable) for (const r of await adMetrics(db, q)) { const c = get(r._id); c.adSpendMinor = r.adSpendMinor; c.impressions = r.impressions; c.clicks = r.clicks; c.attributedOrders = r.attributedOrders; }
   for (const r of await shippingCohort(db, q)) { const c = get(r._id); c.shipments = r.due; c.delayedShipments = r.late; }
   for (const r of facet.reviews ?? []) { const c = get(r._id); c.reviews = r.reviews as number; c.lowRatingReviews = r.lowRatingReviews as number; }
+  for (const r of facet.checkout ?? []) { const c = get(r._id); c.checkoutFailures = r.checkoutFailures as number; c.couponFailures = r.couponFailures as number; }
 
   const computedAt = new Date().toISOString();
   return [...buckets.entries()].sort(([a], [b2]) => (a < b2 ? -1 : 1)).map(([start, counters]) => {
     const startAt = q.bucket === "window" ? q.startAt : new Date(Math.max(Date.parse(start), Date.parse(q.startAt))).toISOString();
     const endAt = bucketEnd(start, q.bucket, q.endAt);
     const cpa = counters.attributedOrders > 0 ? Math.round(counters.adSpendMinor / counters.attributedOrders) : null;
+    const checkoutAttempts = counters.orders + counters.checkoutFailures;
     return MetricSnapshot.parse({
       schemaVersion: 1, businessId: q.businessId, snapshotId: snapshotId(q, startAt, endAt), window: { startAt, endAt }, currency: "GBP",
       dimension: Object.fromEntries(Object.entries(q.dimension).filter(([, v]) => v)),
@@ -162,6 +172,8 @@ export async function computeSnapshots(q: MetricsQuery, dbOverride?: Db): Promis
         conversionRate: ratio(counters.orders, counters.sessions), ctr: ratio(counters.clicks, counters.impressions),
         lateDeliveryRate: ratio(counters.delayedShipments, counters.shipments), lowRatingRate: ratio(counters.lowRatingReviews, counters.reviews),
         costPerAcquisitionMinor: cpa,
+        checkoutFailureRate: checkoutApplicable ? ratio(counters.checkoutFailures, checkoutAttempts) : null,
+        couponFailureRate: checkoutApplicable ? ratio(counters.couponFailures, checkoutAttempts) : null,
       },
       computedAt, completeness: endAt <= q.virtualTime ? "complete" : "partial",
     });

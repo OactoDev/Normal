@@ -3,6 +3,9 @@
 import { useMemo, useState } from "react";
 import { virtualDate } from "@/lib/format";
 import type { EvidenceItem } from "./api";
+import type { ExternalSourceT, ReportT } from "@/intelligence/investigator/schemas";
+import { ExternalEvidenceCard, InternalEvidenceCard } from "./EvidenceCards";
+import { supportsPublicClaim } from "./evidence-card-model";
 
 function fmt(m: { value: number; unit: string }): string {
   if (m.unit.startsWith("GBP minor")) return `£${(m.value / 100).toLocaleString("en-GB", { maximumFractionDigits: 2 })}${m.unit.endsWith("/hour") ? "/h" : ""}`;
@@ -29,35 +32,47 @@ function Detail({ value, depth = 0 }: { value: unknown; depth?: number }) {
 }
 
 /** Real retrieved records with filters and expandable provenance; nothing here is derived from a scenario label. */
-export function EvidenceExplorer({ items, total, simulationRunId }: { items: EvidenceItem[]; total: number; simulationRunId: string }) {
+export function EvidenceExplorer({ items, total, simulationRunId, externalSources = [], report = null }: { items: EvidenceItem[]; total: number; simulationRunId: string; externalSources?: ExternalSourceT[]; report?: ReportT | null }) {
   const [tool, setTool] = useState<string>("all");
   const [origin, setOrigin] = useState<string>("all");
   const [category, setCategory] = useState<string>("all");
+  const [sourceType, setSourceType] = useState("all");
+  const [verification, setVerification] = useState("all");
+  const [role, setRole] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
   const tools = useMemo(() => [...new Set(items.map((i) => i.tool ?? "unknown"))].sort(), [items]);
   const origins = useMemo(() => [...new Set(items.map((i) => i.dataOrigin ?? "unknown"))].sort(), [items]);
   const categories = useMemo(() => [...new Set(items.map((i) => i.evidence.category))].sort(), [items]);
-  const shown = items.filter((i) => (tool === "all" || i.tool === tool) && (origin === "all" || i.dataOrigin === origin) && (category === "all" || i.evidence.category === category));
+  const roleFor = (id: string) => report?.ledger.find((entry) => entry.evidenceId === id)?.role || "context";
+  const roleMatches = (id: string) => role === "all" || roleFor(id) === role || roleFor(id) === "mixed";
+  const shown = items.filter((i) => sourceType !== "external" && (tool === "all" || i.tool === tool) && (origin === "all" || i.dataOrigin === origin) && (category === "all" || i.evidence.category === category)
+    && (verification === "all" || (i.verification?.passed === true) === (verification === "verified")) && roleMatches(i.evidence.evidenceId));
+  const shownExternal = externalSources.filter((source) => sourceType !== "internal" && (verification === "all" || supportsPublicClaim(source) === (verification === "verified"))
+    && (role === "support" ? supportsPublicClaim(source) : roleMatches(source.sourceId) || (role === "contradiction" && source.claimSupport === "contradictory")));
   return (
     <div className="card" data-testid="evidence-explorer">
-      <div className="card-head"><h3>Evidence explorer</h3><span>{total} canonical Evidence record(s) · {shown.length} shown</span></div>
+      <div className="card-head"><h3>Evidence explorer</h3><span>{total} canonical records · {externalSources.length} public sources · {shown.length + shownExternal.length} shown</span></div>
       <div className="card-body row" style={{ flexWrap: "wrap" }}>
+        <label className="small">Source <select className="select" value={sourceType} onChange={(e) => setSourceType(e.target.value)} data-testid="filter-source"><option value="all">all</option><option value="internal">internal</option><option value="external">external</option></select></label>
+        <label className="small">Verification <select className="select" value={verification} onChange={(e) => setVerification(e.target.value)} data-testid="filter-verification"><option value="all">all</option><option value="verified">verified</option><option value="unverified">unverified / rejected</option></select></label>
+        <label className="small">Role <select className="select" value={role} onChange={(e) => setRole(e.target.value)} data-testid="filter-role"><option value="all">all</option><option value="support">supporting</option><option value="contradiction">contradictory</option><option value="context">context</option></select></label>
         <label className="small">Tool <select className="select" value={tool} onChange={(e) => setTool(e.target.value)} data-testid="filter-tool"><option value="all">all</option>{tools.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
         <label className="small">Data origin <select className="select" value={origin} onChange={(e) => setOrigin(e.target.value)} data-testid="filter-origin"><option value="all">all</option>{origins.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
         <label className="small">Category <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} data-testid="filter-category"><option value="all">all</option>{categories.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
       </div>
       <div className="card-body" style={{ display: "grid", gap: 8 }}>
-        {items.length === 0 ? <div className="empty" data-testid="evidence-empty">No evidence collected yet. Use “Collect evidence” to run the deterministic retrieval policy.</div> : null}
-        {items.length > 0 && shown.length === 0 ? <div className="muted small">No evidence matches the filters.</div> : null}
+        {items.length === 0 && externalSources.length === 0 ? <div className="empty" data-testid="evidence-empty">No evidence collected yet. Use “Collect evidence” to run the deterministic retrieval policy.</div> : null}
+        {items.length + externalSources.length > 0 && shown.length + shownExternal.length === 0 ? <div className="muted small">No evidence matches the filters.</div> : null}
+        {shownExternal.map((source) => <ExternalEvidenceCard key={source.sourceId} source={source} />)}
         {shown.map((i) => {
           const e = i.evidence, isOpen = open === e.evidenceId;
           return (
-            <div key={e.evidenceId} className="order" data-testid="evidence-item" data-tool={i.tool ?? ""}>
+            <div key={e.evidenceId} id={`evidence-${e.evidenceId}`} className="order" data-testid="evidence-item" data-tool={i.tool ?? ""}>
               <div className="row" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={() => setOpen(isOpen ? null : e.evidenceId)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(isOpen ? null : e.evidenceId); } }} role="button" aria-expanded={isOpen} data-testid="evidence-toggle">
                 <strong>{e.title}</strong>
                 <div className="row"><span className="pill">{i.tool ?? "unknown tool"}</span><span className="pill">{e.category}</span><span className={`pill ${i.dataOrigin === "simulated" ? "accent" : ""}`}>{i.dataOrigin ?? "origin unknown"}</span>{i.verification ? <span className={`pill ${i.verification.passed ? "ok" : "danger"}`}>{i.verification.passed ? "verified" : "unverified"}</span> : null}</div>
               </div>
-              <span className="small">{e.observation}</span>
+              <InternalEvidenceCard item={i} compact />
               <span className="muted small">{e.window ? `${virtualDate(e.window.startAt)} → ${virtualDate(e.window.endAt)} · ` : ""}{e.sourceRecords.length} source records · retrieved {new Date(e.retrievedAt).toLocaleString("en-GB")} · <code>{e.evidenceId}</code></span>
               {isOpen ? (
                 <div style={{ display: "grid", gap: 10 }} data-testid="evidence-detail">

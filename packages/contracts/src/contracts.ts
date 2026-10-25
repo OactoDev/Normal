@@ -120,11 +120,14 @@ export const MetricCounters = z.object({
   clicks: z.number().int().nonnegative(), attributedOrders: z.number().int().nonnegative(),
   shipments: z.number().int().nonnegative(), delayedShipments: z.number().int().nonnegative(),
   reviews: z.number().int().nonnegative(), lowRatingReviews: z.number().int().nonnegative(),
+  // Optional for snapshots persisted before checkout metrics were introduced.
+  checkoutFailures: z.number().int().nonnegative().optional(), couponFailures: z.number().int().nonnegative().optional(),
 }).strict();
 export const MetricRates = z.object({
   conversionRate: Rate.nullable(), ctr: Rate.nullable(),
   lateDeliveryRate: Rate.nullable(), lowRatingRate: Rate.nullable(),
   costPerAcquisitionMinor: z.number().int().nonnegative().nullable(),
+  checkoutFailureRate: Rate.nullable().optional(), couponFailureRate: Rate.nullable().optional(),
 }).strict();
 export const MetricSnapshot = z.object({
   ...SchemaMeta, snapshotId: Id, window: TimeWindow, currency: Currency,
@@ -137,6 +140,7 @@ export const MetricSnapshot = z.object({
 export const MetricName = z.enum([
   'revenue_minor', 'conversion_rate', 'orders', 'cac_minor', 'ctr',
   'late_delivery_rate', 'low_rating_rate', 'ad_spend_minor',
+  'checkout_failure_rate', 'coupon_failure_rate',
 ]);
 export const Anomaly = z.object({
   ...SchemaMeta, anomalyId: Id, metric: MetricName,

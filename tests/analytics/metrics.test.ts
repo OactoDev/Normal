@@ -13,7 +13,7 @@ const END = "2026-10-03T00:00:00.000Z";
 
 function manual(events: BusinessEventT[], startAt: string, endAt: string, now = endAt) {
   const inWin = events.filter((e) => e.occurredAt >= startAt && e.occurredAt < endAt);
-  const c = { sessions: 0, orders: 0, revenueMinor: 0, refundMinor: 0, adSpendMinor: 0, impressions: 0, clicks: 0, attributedOrders: 0, shipments: 0, delayedShipments: 0, reviews: 0, lowRatingReviews: 0 };
+  const c = { sessions: 0, orders: 0, revenueMinor: 0, refundMinor: 0, adSpendMinor: 0, impressions: 0, clicks: 0, attributedOrders: 0, shipments: 0, delayedShipments: 0, reviews: 0, lowRatingReviews: 0, checkoutFailures: 0, couponFailures: 0 };
   const shipped = new Set<string>(); const delayed = new Set<string>();
   for (const e of inWin) {
     switch (e.type) {
@@ -23,6 +23,7 @@ function manual(events: BusinessEventT[], startAt: string, endAt: string, now = 
       case "ad.metrics_observed": break; // ads are windowed by window.startAt below
       case "delivery.status_changed": break; // shipping uses the due-date cohort below
       case "review.created": c.reviews++; if (e.payload.rating <= 2) c.lowRatingReviews++; break;
+      case "checkout.failed": c.checkoutFailures++; if (e.payload.failureCode === "coupon_rejected") c.couponFailures++; break;
       default: break;
     }
   }
@@ -72,6 +73,8 @@ describe("analytics: MetricSnapshot aggregation (Milestone 5)", () => {
     expect(snap.rates.conversionRate).toBeCloseTo(snap.counters.orders / snap.counters.sessions, 10);
     expect(snap.rates.ctr).toBeCloseTo(snap.counters.clicks / snap.counters.impressions, 10);
     expect(snap.rates.costPerAcquisitionMinor).toBe(Math.round(snap.counters.adSpendMinor / snap.counters.attributedOrders));
+    expect(snap.rates.checkoutFailureRate).toBeCloseTo(snap.counters.checkoutFailures! / (snap.counters.orders + snap.counters.checkoutFailures!), 10);
+    expect(snap.rates.couponFailureRate).toBeCloseTo(snap.counters.couponFailures! / (snap.counters.orders + snap.counters.checkoutFailures!), 10);
     for (const v of Object.values(snap.rates)) if (v !== null) expect(Number.isFinite(v)).toBe(true);
   });
 
@@ -81,9 +84,9 @@ describe("analytics: MetricSnapshot aggregation (Milestone 5)", () => {
     const daily = await computeSnapshots({ businessId: TEST_BUSINESS, simulationRunId: RUN, startAt: START, endAt: END, bucket: "day", dimension: {}, virtualTime: END });
     expect(hourly).toHaveLength(48);
     expect(daily).toHaveLength(2);
-    for (const key of ["sessions", "orders", "revenueMinor", "adSpendMinor", "impressions", "clicks", "reviews"] as const) {
-      expect(hourly.reduce((a, s) => a + s.counters[key], 0)).toBe(total.counters[key]);
-      expect(daily.reduce((a, s) => a + s.counters[key], 0)).toBe(total.counters[key]);
+    for (const key of ["sessions", "orders", "revenueMinor", "adSpendMinor", "impressions", "clicks", "reviews", "checkoutFailures", "couponFailures"] as const) {
+      expect(hourly.reduce((a, s) => a + (s.counters[key] ?? 0), 0)).toBe(total.counters[key]);
+      expect(daily.reduce((a, s) => a + (s.counters[key] ?? 0), 0)).toBe(total.counters[key]);
     }
     expect(hourly[0].window).toEqual({ startAt: START, endAt: "2026-10-01T01:00:00.000Z" });
     expect(daily[1].counters).toEqual(manual(events, "2026-10-02T00:00:00.000Z", END));
@@ -91,7 +94,7 @@ describe("analytics: MetricSnapshot aggregation (Milestone 5)", () => {
     const [future] = await computeSnapshots({ businessId: TEST_BUSINESS, simulationRunId: RUN, startAt: END, endAt: "2026-10-04T00:00:00.000Z", bucket: "window", dimension: {}, virtualTime: END });
     expect(future.completeness).toBe("partial");
     expect(future.counters.sessions).toBe(0);
-    expect(future.rates).toEqual({ conversionRate: null, ctr: null, lateDeliveryRate: null, lowRatingRate: null, costPerAcquisitionMinor: null });
+    expect(future.rates).toEqual({ conversionRate: null, ctr: null, lateDeliveryRate: null, lowRatingRate: null, costPerAcquisitionMinor: null, checkoutFailureRate: null, couponFailureRate: null });
   });
 
   it("campaign and product dimensions slice correctly; cross-business data is isolated", async () => {

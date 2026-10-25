@@ -6,7 +6,7 @@ test.describe.serial("business control room", () => {
 
   test("starts from a seed, advances time, renders database-backed metrics and charts", async ({ page, request }) => {
     await page.goto("/dev/simulator");
-    await expect(page.getByText("Nike — Unaffiliated Simulation.").first()).toBeVisible();
+    await expect(page.getByText("Nike names and imagery are used in an unaffiliated synthetic simulation.", { exact: false }).first()).toBeVisible();
     await page.getByTestId("seed-input").fill("42");
     await page.getByTestId("runid-input").fill(E2E_RUN);
     await page.getByTestId("start-run").click();

@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { AppShell } from "@/components/normal/AppShell";
-import { CampaignWorkspace } from "@/components/normal/CampaignWorkspace";
+import { MetaAdsManagerPage } from "@/components/normal/MetaAdsManager";
 
 export const metadata: Metadata = {
-  title: "Campaign workspace · Normal",
-  description: "Campaign status, budget, delivery and recorded agent actions for the selected simulation run.",
+  title: "Ads Manager · Nike Demo Account",
+  description: "A standalone Meta Ads Manager style simulation showing campaigns and recorded performance for the selected run.",
 };
 
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <AppShell title="Campaign workspace"><CampaignWorkspace campaignId={id} /></AppShell>;
+  return <MetaAdsManagerPage campaignId={id} />;
 }

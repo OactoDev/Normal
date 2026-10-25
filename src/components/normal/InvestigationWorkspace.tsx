@@ -8,7 +8,11 @@ import { api, q, sevClass, type Bundle, type CollectionSummary, type EvidenceLis
 import { useRun } from "./run-context";
 import { CapabilityPlaceholder } from "./CapabilityPlaceholder";
 import { EvidenceExplorer } from "./EvidenceExplorer";
+import { AIInvestigation } from "./AIInvestigation";
 import { EvidenceToolTrace } from "./EvidenceToolTrace";
+import { PageSkeleton } from "./PageSkeleton";
+import type { ExternalSourceT, ReportT } from "@/intelligence/investigator/schemas";
+import { SolutionPlanning } from "./SolutionPlanning";
 
 interface Data { bundle: Bundle; evidence: EvidenceList; trace: Trace }
 
@@ -19,6 +23,7 @@ export function InvestigationWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [lastRun, setLastRun] = useState<{ runId: string | null; summary: CollectionSummary } | null>(null);
+  const [research, setResearch] = useState<{ runId: string | null; sources: ExternalSourceT[]; report: ReportT | null } | null>(null);
   const selected = useRef<string | null>(null);
   const requestSequence = useRef(0);
 
@@ -52,12 +57,12 @@ export function InvestigationWorkspace() {
     } finally { setBusy(false); }
   };
 
-  if (!loaded) return <div className="muted">Loading…</div>;
+  if (!loaded) return <PageSkeleton variant="workspace" label="Loading investigation workspace" />;
   const current = result && result.runId === runId ? result : null;
   const data = current?.data ?? null, notFound = current?.notFound ?? false, last = lastRun && lastRun.runId === runId ? lastRun.summary : null;
   if (notFound) return <div className="empty" data-testid="investigation-not-found">Investigation <code>{investigationId}</code> does not exist in run <code>{runId}</code>. Evidence is scoped to one business and simulation run; pick the run it belongs to. <Link href={withRun("/dashboard")}>Back to overview</Link>.</div>;
   if (current?.error && !data) return <div className="alert error" data-testid="investigation-error">{current.error}</div>;
-  if (!data) return <div className="muted">Loading investigation…</div>;
+  if (!data) return <PageSkeleton variant="workspace" label="Loading investigation workspace" />;
   const { bundle, evidence, trace } = data;
   const inv = bundle.investigation, inc = bundle.incident, latest = evidence.latestCollection;
   return (
@@ -65,15 +70,17 @@ export function InvestigationWorkspace() {
       <div className="card" data-testid="incident-overview">
         <div className="card-head"><h3>{inv.title}</h3><div className="row">{inc ? <span className={`pill ${sevClass(inc.severity.level)}`}>{inc.severity.level} · {inc.severity.score}</span> : null}<span className="pill" data-testid="investigation-status">{inv.status.replaceAll("_", " ")}</span></div></div>
         <div className="card-body" style={{ display: "grid", gap: 6 }}>
-          <span className="small"><code>{inv.investigationId}</code> · business <code>{inv.businessId}</code> · run <code>{bundle.simulationRunId}</code> · opened {virtualDate(inv.startedAt)} · updated {virtualDate(inv.updatedAt)}</span>
+          <span className="small"><strong>Nike — Unaffiliated Simulation</strong> · <code>{inv.investigationId}</code> · business <code>{inv.businessId}</code> · run <code>{bundle.simulationRunId}</code> · opened {virtualDate(inv.startedAt)} · updated {virtualDate(inv.updatedAt)}</span>
           <span className="small">Window: {bundle.timeWindows.incident.startAt ? `${virtualDate(bundle.timeWindows.incident.startAt)} → ${bundle.timeWindows.incident.endAt ? virtualDate(bundle.timeWindows.incident.endAt) : "ongoing"}` : "—"}</span>
-          <span className="small">Affected: {[...bundle.affected.campaigns, ...bundle.affected.products, ...bundle.affected.channels].join(", ") || "whole business"}</span>
+          <span className="small">Affected: {[...bundle.affected.campaigns, ...bundle.affected.products, ...bundle.affected.channels].join(", ") || "whole business"} · Metrics: {bundle.anomalies.map((anomaly) => anomaly.metric.replaceAll("_", " ")).join(", ") || "pending"} · Evidence: {evidence.total}</span>
           {inc ? <span className="muted small">{inc.summary}</span> : null}
           <div className="scroll-x"><table data-testid="related-anomalies"><thead><tr><th>Anomaly</th><th>Direction</th><th className="num">Actual</th><th className="num">Baseline</th><th className="num">Change</th><th>Severity</th><th>Window</th></tr></thead>
             <tbody>{bundle.anomalies.map((a) => <tr key={a.anomalyId}><td><code>{a.metric}</code></td><td>{a.direction}</td><td className="num">{a.actualValue.toFixed(4)}</td><td className="num">{a.baselineValue.toFixed(4)}</td><td className="num">{a.changePercent > 0 ? "+" : ""}{a.changePercent.toFixed(1)}%</td><td><span className={`pill ${sevClass(a.severity)}`}>{a.severity}</span></td><td className="small">{virtualDate(a.currentWindow.startAt)} → {virtualDate(a.currentWindow.endAt)}</td></tr>)}</tbody></table></div>
           <span className="muted small">{bundle.note}</span>
         </div>
       </div>
+
+      <AIInvestigation key={`${bundle.simulationRunId}:${inv.investigationId}`} investigationId={inv.investigationId} businessId={inv.businessId} simulationRunId={bundle.simulationRunId} evidenceItems={evidence.items} onComplete={() => void load(runId)} onResearchUpdate={(sources, report) => { if (selected.current === runId) setResearch({ runId, sources, report }); }} />
 
       <div className="card" data-testid="evidence-panel">
         <div className="card-head"><h3>Evidence retrieval</h3>
@@ -94,20 +101,9 @@ export function InvestigationWorkspace() {
         </div>
       </div>
 
-      <EvidenceExplorer items={evidence.items} total={evidence.total} simulationRunId={bundle.simulationRunId} />
+      <EvidenceExplorer items={evidence.items} total={evidence.total} simulationRunId={bundle.simulationRunId} externalSources={research?.runId === runId ? research.sources : []} report={research?.runId === runId ? research.report : null} />
       <EvidenceToolTrace collections={trace.collections} runs={trace.toolRuns} />
-
-      <CapabilityPlaceholder title="Mubit investigator" status="Not implemented" testId="placeholder-investigator"
-        description="Will read this investigation's evidence, form hypotheses, request further tool calls from the same registry and return a structured diagnosis for review. Nothing shown here is generated until that integration exists."
-        inputs={["Investigation and canonical Evidence above", "Evidence tool registry (eight read-only tools)", "Model-requested additional tool calls"]}
-        outputs={["Hypotheses with supporting and contradicting evidenceIds", "Model reasoning summary and missing-evidence list", "DiagnosisModelOutput → Diagnosis"]} contracts={["DiagnosisModelOutput", "Diagnosis", "RootCause"]}>
-        <button className="btn" disabled data-testid="run-diagnosis">Run diagnosis (not available)</button>
-      </CapabilityPlaceholder>
-      <CapabilityPlaceholder title="Solution planner" status="Not implemented" testId="placeholder-planner"
-        description="Will produce an evidence-backed ProposedPlan: actions per agent, evidence references, dependencies, risk classification and approval requirements, served to the partner as PlanHandoff."
-        inputs={["Diagnosis", "Evidence"]} outputs={["ProposedPlan (actions, successCriteria, expiresAt)", "PlanHandoff via GET /api/plans/:id"]} contracts={["ProposedPlan", "ActionProposal", "SuccessCriterion", "PlanHandoff"]}>
-        <button className="btn" disabled data-testid="propose-plan">Propose plan (not available)</button>
-      </CapabilityPlaceholder>
+      <SolutionPlanning key={`planning:${bundle.simulationRunId}:${inv.investigationId}`} investigationId={inv.investigationId} businessId={inv.businessId} simulationRunId={bundle.simulationRunId} evidenceItems={evidence.items} />
       <CapabilityPlaceholder title="Agent execution" status="Partner integration pending" testId="placeholder-execution"
         description="Approval and execution are the partner's module. The integration boundary is the PlanHandoff contract and the existing adapters (set daily budget, delay notice, banner); this panel is where their UI will be mounted or linked."
         inputs={["PlanApproval", "approved ActionProposals"]} outputs={["AgentMission", "ActionExecution", "callback business events"]} contracts={["PlanApproval", "AgentMission", "ActionExecution"]} />

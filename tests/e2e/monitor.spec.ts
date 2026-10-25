@@ -23,7 +23,7 @@ test.describe.serial("anomaly monitor", () => {
 
   test("shows API-backed incidents and anomalies, runs an idempotent scan, filters by severity and opens the investigation", async ({ page, request }) => {
     await page.goto("/dev/monitor");
-    await expect(page.getByText("Nike — Unaffiliated Simulation.").first()).toBeVisible();
+    await expect(page.getByText("Nike names and imagery are used in an unaffiliated synthetic simulation.", { exact: false }).first()).toBeVisible();
     await page.getByTestId("monitor-run-select").selectOption(RUN);
     const api = await (await request.get(`/api/anomalies?simulationRunId=${RUN}&limit=100`)).json();
     await expect(page.getByTestId("anomaly-total")).toHaveText(String(api.total));

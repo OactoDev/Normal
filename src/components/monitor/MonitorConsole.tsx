@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { virtualDate } from "@/lib/format";
 import { NormalLogo } from "@/components/normal/NormalLogo";
+import { PageSkeleton } from "@/components/normal/PageSkeleton";
 
 type Severity = "low" | "medium" | "high" | "critical";
 interface RunsResponse { activeSimulationRunId: string | null; runs: Array<{ simulationRunId: string; virtualTime: string }> }
@@ -122,6 +123,7 @@ export function MonitorConsole() {
     try { setBundle(await api<Bundle>(`/api/investigations/${encodeURIComponent(id)}`)); } catch (e) { setError((e as Error).message); }
   };
 
+  const initialLoading = (!runs || (runId !== null && status === null)) && !error && !unavailable;
   return (
     <>
       <header className="topbar"><div className="shell topbar-inner">
@@ -141,6 +143,7 @@ export function MonitorConsole() {
         </div>
         {unavailable ? <div className="alert error">Monitoring controls are only available in development or a configured demo mode.</div> : null}
         {error ? <div className="alert error" data-testid="monitor-error">{error}</div> : null}
+        {initialLoading ? <PageSkeleton variant="section" label="Loading anomaly monitor data" /> : <>
         <div className="card" data-testid="monitor-worker-status">
           Direct trigger: {status?.methodA?.enabled ? "enabled" : "disabled"} · Change Stream worker: {status?.worker?.connected ? "connected (recent heartbeat)" : "no current connection confirmed"}
           <div className="muted">Jobs: {status?.jobs?.pending ?? 0} pending · {status?.jobs?.running ?? 0} running · {status?.jobs?.completed ?? 0} completed · {status?.jobs?.failed ?? 0} failed</div>
@@ -226,6 +229,7 @@ export function MonitorConsole() {
             {anomalies && anomalies.items.length === 0 ? <div className="empty">No anomalies recorded for this run{severity ? ` at ${severity} severity` : ""}.</div> : null}
           </div>
         </div>
+        </>}
       </main>
     </>
   );

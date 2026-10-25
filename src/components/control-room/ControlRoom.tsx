@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CATEGORY_LABEL, fixed, money, moneyCompact, num, pct, shortDate, shortTime, virtualDate } from "@/lib/format";
 import { Chart } from "@/components/control-room/charts";
 import { NormalLogo } from "@/components/normal/NormalLogo";
+import { PageSkeleton } from "@/components/normal/PageSkeleton";
 import type { Breakdown, LedgerEvent, RunsResponse, StateResponse } from "@/components/control-room/types";
 
 const SCENARIOS = ["healthy", "ad_fatigue", "delivery_delays", "viral_demand", "negative_reviews", "promo_checkout_failure"] as const;
@@ -220,7 +221,7 @@ export function ControlRoom() {
           </aside>
 
           <section style={{ display: "grid", gap: 16, minWidth: 0 }}>
-            {!data ? <div className="card"><div className="empty">{runs && runs.runs.length === 0 ? "No simulation yet. Start a run with a seed to create the Nike digital twin." : <><span className="spinner" /> Loading…</>}</div></div> : (
+            {!data ? runs && runs.runs.length === 0 ? <div className="card"><div className="empty">No simulation yet. Start a run with a seed to create the Nike digital twin.</div></div> : error ? null : <PageSkeleton variant="section" label="Loading control room data" /> : (
               <>
                 <div className="grid kpis" data-testid="kpis">
                   <Kpi label="Revenue (net)" value={moneyCompact(total?.counters.revenueMinor)} sub={`${num(total?.counters.orders)} orders · refunds ${moneyCompact(total?.counters.refundMinor)}`} />

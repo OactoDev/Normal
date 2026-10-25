@@ -45,6 +45,8 @@ function metricValue(s: MetricSnapshotT, metric: AnomalyT["metric"]): number | n
     case "late_delivery_rate": return s.rates.lateDeliveryRate;
     case "low_rating_rate": return s.rates.lowRatingRate;
     case "cac_minor": return s.rates.costPerAcquisitionMinor;
+    case "checkout_failure_rate": return s.rates.checkoutFailureRate ?? null;
+    case "coupon_failure_rate": return s.rates.couponFailureRate ?? null;
   }
 }
 function pooled(metric: AnomalyT["metric"], snaps: MetricSnapshotT[]): [number, number] {
@@ -55,6 +57,8 @@ function pooled(metric: AnomalyT["metric"], snaps: MetricSnapshotT[]): [number, 
     case "late_delivery_rate": return [sum((s) => s.counters.delayedShipments), sum((s) => s.counters.shipments)];
     case "low_rating_rate": return [sum((s) => s.counters.lowRatingReviews), sum((s) => s.counters.reviews)];
     case "cac_minor": return [sum((s) => s.counters.adSpendMinor), sum((s) => s.counters.attributedOrders)];
+    case "checkout_failure_rate": return [sum((s) => s.counters.checkoutFailures ?? 0), sum((s) => s.counters.orders + (s.counters.checkoutFailures ?? 0))];
+    case "coupon_failure_rate": return [sum((s) => s.counters.couponFailures ?? 0), sum((s) => s.counters.orders + (s.counters.checkoutFailures ?? 0))];
     default: return [0, 0];
   }
 }
@@ -126,7 +130,7 @@ describe("anomaly detection persistence and APIs (Milestone 4)", () => {
       const baseline = a.sourceSnapshotIds.slice(1).map((id) => byId.get(id)!);
       const finding = (await db.collection<FindingDoc>(COLLECTIONS.detectionFindings).findOne({ businessId: TEST_BUSINESS, anomalyId: a.anomalyId }))!;
       expect(baseline).toHaveLength(finding.evaluation.baseline!.n);
-      if (["ctr", "conversion_rate", "late_delivery_rate", "low_rating_rate"].includes(a.metric)) {
+      if (["ctr", "conversion_rate", "late_delivery_rate", "low_rating_rate", "checkout_failure_rate", "coupon_failure_rate"].includes(a.metric)) {
         const [num, den] = pooled(a.metric, baseline);
         expect(a.baselineValue).toBeCloseTo((num + 0.5) / (den + 1), 9);
       } else if (a.metric === "cac_minor") {
@@ -211,6 +215,16 @@ describe("anomaly detection persistence and APIs (Milestone 4)", () => {
     expect(page.items[0].anomaly.anomalyId).toBe(all.items[1].anomaly.anomalyId);
     const ctr = await listAnomalies({ businessId: TEST_BUSINESS, simulationRunId: RUN_A, metric: "ctr" });
     expect(ctr.items.every((i) => i.anomaly.metric === "ctr")).toBe(true);
+    const campaignCtrs = ctr.items.filter((item) => item.finding?.segment.kind === "campaign");
+    expect(campaignCtrs.length).toBeGreaterThan(0);
+    const campaignIds = campaignCtrs.map((item) => item.finding!.segment.id!);
+    const campaignNames = new Map((await db.collection(COLLECTIONS.simulatedCampaigns).find({ businessId: TEST_BUSINESS, simulationRunId: RUN_A, campaignId: { $in: campaignIds } }, { projection: { _id: 0, campaignId: 1, name: 1 } }).toArray()).map((campaign) => [campaign.campaignId, campaign.name]));
+    for (const item of campaignCtrs) {
+      expect(item.signalFamilyId).toBe(item.finding!.signalId);
+      expect(item.signalLabel).toBe(item.finding!.label);
+      expect(item.entityName).toBe(campaignNames.get(item.finding!.segment.id!));
+    }
+    for (const item of ctr.items.filter((entry) => entry.finding?.segment.kind === "global")) expect(item.entityName).toBe(item.finding!.segmentLabel);
     const adv = await listAnomalies({ businessId: TEST_BUSINESS, simulationRunId: RUN_A, category: "advertising" });
     expect(adv.total).toBe(all.items.filter((i) => i.finding?.theme === "advertising").length);
     const sev = all.items[0].anomaly.severity;

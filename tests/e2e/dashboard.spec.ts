@@ -17,6 +17,23 @@ async function expectLayoutFits(page: Page) {
   expect(nav!.y + nav!.height).toBeLessThanOrEqual(main!.y);
 }
 
+async function overviewCardRects(page: Page, loading: boolean) {
+  const selectors = loading ? {
+    risk: ".skeleton-risk", signals: ".skeleton-signals", revenue: ".skeleton-revenue",
+    metrics: ".skeleton-metrics", activity: ".skeleton-activity", campaigns: ".skeleton-campaigns",
+  } : {
+    risk: ".risk-card", signals: ".top-signals-card", revenue: ".revenue-card",
+    metrics: ".metric-card", activity: ".activity-card", campaigns: ".campaign-card",
+  };
+  const rects: Record<string, { x: number; y: number; width: number; height: number }> = {};
+  for (const [name, selector] of Object.entries(selectors)) {
+    const rect = await page.locator(selector).boundingBox();
+    if (!rect) throw new Error(`${name} card is missing`);
+    rects[name] = rect;
+  }
+  return rects;
+}
+
 test.describe.serial("unified dashboard and evidence retrieval", () => {
   let investigationId = "";
   test.beforeAll(async ({ request }) => {
@@ -35,36 +52,97 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     }
   });
 
-  test("overview shows the selected run's real metrics, monitoring health, pipeline readiness and incidents", async ({ page, request }) => {
+  test("overview shows the selected run's real metrics, monitoring activity and incidents", async ({ page, request }) => {
     await page.goto(`/dashboard?run=${RUN}`);
     await expect(page.getByTestId("dashboard-run-select")).toHaveValue(RUN);
     await expect(page.getByTestId("overview-kpis")).toBeVisible();
     const breakdown = await (await request.get(`/api/metrics/breakdown?simulationRunId=${RUN}&days=7`)).json();
-    await expect(page.getByTestId("overview-kpis")).toContainText(`${breakdown.total.counters.orders} orders`);
-    await expect(page.getByTestId("overview-virtual-time")).toContainText("05 Oct 00:00");
-    const status = await (await request.get(`/api/dev/monitor/run?simulationRunId=${RUN}`)).json();
-    await expect(page.getByTestId("overview-worker")).toContainText(status.worker.connected ? "connected" : "no current connection confirmed");
-    await expect(page.getByTestId("overview-pipeline")).toContainText("Investigate: not implemented");
+    await expect(page.getByTestId("overview-kpis").locator(".metric").filter({ hasText: "Orders" }).locator("strong")).toHaveText(breakdown.total.counters.orders.toLocaleString("en-GB"));
+    await expect(page.getByTestId("overview-activity")).toContainText("05 Oct 00:00");
+    await expect(page.getByTestId("overview-activity")).toContainText("Open an investigation to start the Mubit investigator");
     await expect(page.getByTestId("overview-incident").first()).toContainText("Advertising performance deterioration");
-    await expect(page.getByTestId("overview-investigations")).toContainText(investigationId);
+    await expect(page.locator(`a[href="/dashboard/investigations/${investigationId}?run=${RUN}"]`).first()).toBeVisible();
     await expectLayoutFits(page);
     // Run switching changes every panel; the other run has no investigation.
     await page.getByTestId("dashboard-run-select").selectOption(OTHER);
     await expect(page).toHaveURL(new RegExp(`run=${OTHER}`));
-    await expect(page.getByTestId("overview-investigations")).not.toContainText(investigationId);
+    await expect(page.locator(`a[href*="/dashboard/investigations/${investigationId}"]`)).toHaveCount(0);
     await page.getByTestId("dashboard-run-select").selectOption(RUN);
-    await page.getByTestId("open-investigation").first().click();
+    await page.locator(`a[href="/dashboard/investigations/${investigationId}?run=${RUN}"]`).first().click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}`));
     await expect(page.getByTestId("incident-overview")).toContainText(investigationId);
   });
 
+  test("overview shows skeletons during data retrieval and keeps campaigns in the responsive layout", async ({ page, isMobile }) => {
+    let release!: () => void;
+    let loadingRects: Awaited<ReturnType<typeof overviewCardRects>> | null = null;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/api/metrics/breakdown?*", async (route) => { await gate; await route.continue(); });
+    try {
+      await page.goto(`/dashboard?run=${RUN}`);
+      const skeleton = page.getByTestId("page-skeleton");
+      await expect(skeleton).toBeVisible();
+      await expect(page.locator(".skeleton-risk")).toBeVisible();
+      await expect(skeleton.locator(".skeleton-block").first()).toHaveCSS("animation-name", "skeleton-shimmer");
+      loadingRects = await overviewCardRects(page, true);
+    } finally { release(); }
+    await expect(page.getByTestId("page-skeleton")).toHaveCount(0);
+    if (!loadingRects) throw new Error("Overview skeleton did not render");
+    const loadedRects = await overviewCardRects(page, false);
+    if (!isMobile) for (const name of Object.keys(loadedRects)) for (const dimension of ["x", "y", "width", "height"] as const) {
+      expect(Math.abs(loadedRects[name][dimension] - loadingRects[name][dimension]), `${name} ${dimension} shifted after loading`).toBeLessThanOrEqual(1);
+    }
+    const campaigns = page.getByTestId("campaign-carousel");
+    const signals = page.getByTestId("overview-signals");
+    await expect(campaigns).toBeVisible();
+    const campaignBox = (await campaigns.boundingBox())!;
+    const signalBox = (await signals.boundingBox())!;
+    const slides = await campaigns.locator(".campaign-slide").all();
+    expect(slides.length).toBeGreaterThan(3);
+    const first = (await slides[0].boundingBox())!;
+    const second = (await slides[1].boundingBox())!;
+    await expect.poll(async () => page.locator(".revenue-card .bar").first().evaluate((bar) => bar.getBoundingClientRect().height)).toBeGreaterThan(10);
+    if (isMobile) {
+      expect(campaignBox.y).toBeGreaterThan(signalBox.y);
+      expect(second.y).toBeCloseTo(first.y, 0);
+    } else {
+      const riskBox = (await page.getByTestId("overview-run").boundingBox())!;
+      expect(riskBox.width).toBeGreaterThan(370);
+      expect(signalBox.width).toBeGreaterThan(470);
+      expect(campaignBox.width).toBeGreaterThan(280);
+      expect(campaignBox.x).toBeGreaterThan(signalBox.x + signalBox.width - 2);
+      expect(second.y).toBeGreaterThan(first.y + first.height - 2);
+      expect(Math.max(...Object.values(loadedRects).map((rect) => rect.y + rect.height))).toBeLessThanOrEqual(page.viewportSize()!.height);
+      for (const selector of [".signal-list", ".activity-card ol"]) {
+        const list = page.locator(selector);
+        expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+        await expect(list).toHaveAttribute("tabindex", "0");
+      }
+      const track = campaigns.locator(".campaign-track");
+      expect(await track.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+      for (let i = 1; i < slides.length; i++) await campaigns.getByRole("button", { name: "Next campaign" }).click();
+      await expect(campaigns.locator(".campaign-controls > span")).toHaveText(`${slides.length} / ${slides.length}`);
+      await expect.poll(async () => track.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await expectLayoutFits(page);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      expect(Math.max(...Object.values(await overviewCardRects(page, false)).map((rect) => rect.y + rect.height))).toBeLessThanOrEqual(900);
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      const wideSignals = (await signals.boundingBox())!;
+      const wideCampaigns = (await campaigns.boundingBox())!;
+      expect(wideSignals.width).toBeGreaterThan(700);
+      expect(wideCampaigns.x).toBeGreaterThan(wideSignals.x + wideSignals.width - 2);
+      expect(Math.max(...Object.values(await overviewCardRects(page, false)).map((rect) => rect.y + rect.height))).toBeLessThanOrEqual(1080);
+    }
+    await expectLayoutFits(page);
+  });
+
   test("rapid run changes never leave a stale investigation link or navigate with its run", async ({ page }) => {
     await page.goto(`/dashboard?run=${RUN}`);
-    await expect(page.getByTestId("open-investigation").first()).toBeVisible();
+    await expect(page.locator(`a[href*="/dashboard/investigations/${investigationId}"]`).first()).toBeVisible();
     const selector = page.getByTestId("dashboard-run-select").first();
     await selector.selectOption(OTHER);
     await selector.selectOption(RUN);
-    const open = page.getByTestId("open-investigation").first();
+    const open = page.locator(`a[href*="/dashboard/investigations/${investigationId}"]`).first();
     await expect(open).toHaveAttribute("href", new RegExp(`run=${RUN}$`));
     await open.click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}`));
@@ -74,6 +152,36 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(selector).toHaveValue(RUN);
     await page.goForward();
     await expect(page.getByTestId("incident-overview")).toContainText(investigationId);
+  });
+
+  test("signals consolidate persisted incident observations, expand exact evidence and preserve investigation navigation", async ({ page, request }) => {
+    const response = await request.get(`/api/signals?businessId=nike_demo&simulationRunId=${RUN}&limit=100`);
+    expect(response.ok()).toBe(true);
+    const groups = await response.json();
+    const group = groups.items.find((item: { investigationId: string | null }) => item.investigationId === investigationId);
+    expect(group).toBeTruthy();
+    expect(group.observationCount).toBeGreaterThan(1);
+
+    await page.goto(`/dashboard/signals?run=${RUN}`);
+    const card = page.getByTestId("signal-group").filter({ has: page.locator(".signal-investigation-link") }).filter({ hasText: group.incidentTitle ?? group.title }).first();
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId("signal-investigation-link")).toHaveAttribute("href", new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}$`));
+    await card.getByRole("button", { name: "Expand observations" }).click();
+    await expect(card.getByTestId("signal-observation")).toHaveCount(group.observationCount);
+    const aggregate = group.observations.find((item: { isBusinessAggregate: boolean }) => item.isBusinessAggregate);
+    if (aggregate) {
+      await card.getByTestId("signal-observation").filter({ hasText: "Whole business" }).click();
+      await expect(page.locator(".signal-detail-context")).toContainText("Whole business");
+    }
+    await card.getByTestId("signal-investigation-link").click();
+    await expect(page).toHaveURL(new RegExp(`/dashboard/investigations/${investigationId}\\?run=${RUN}$`));
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`/dashboard/signals\\?run=${RUN}$`));
+    await page.goForward();
+    await expect(page.getByTestId("incident-overview")).toContainText(investigationId);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    const documentWidth = await page.locator("html").evaluate((element) => element.scrollWidth);
+    expect(documentWidth).toBeLessThanOrEqual(viewportWidth + 1);
   });
 
   test("an unknown run never silently displays the active run", async ({ page }) => {
@@ -88,7 +196,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("process-flow")).toBeVisible();
     await expect(page.getByTestId("stage-observe")).toHaveAttribute("data-status", "operational");
     await expect(page.getByTestId("stage-detect")).toHaveAttribute("data-status", "operational");
-    await expect(page.getByTestId("stage-investigate")).toHaveAttribute("data-status", "not_implemented");
+    await expect(page.getByTestId("stage-investigate")).toHaveAttribute("data-status", "waiting_for_data");
     await expect(page.getByTestId("stage-execute")).toHaveAttribute("data-status", "partner_pending");
     await page.getByTestId("stage-retrieve").click();
     await expect(page).toHaveURL(/stage=retrieve/);
@@ -96,7 +204,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("stage-panel").locator("tbody tr")).toHaveCount(8);
     await expectLayoutFits(page);
     await page.getByTestId("stage-plan").click();
-    await expect(page.getByTestId("stage-panel")).toHaveAttribute("data-capability-status", "Not implemented");
+    await expect(page.getByTestId("stage-panel")).toHaveAttribute("data-capability-status", "Waiting for data");
     await expect(page.getByTestId("stage-panel")).toContainText("ProposedPlan");
     await page.getByTestId("stage-approve").click();
     await expect(page.getByTestId("stage-panel")).toHaveAttribute("data-capability-status", "Partner integration pending");
@@ -108,9 +216,10 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("incident-overview")).toContainText("Advertising performance deterioration");
     await expect(page.getByTestId("related-anomalies").locator("tbody tr")).toHaveCount((await (await request.get(`/api/investigations/${investigationId}?simulationRunId=${RUN}`)).json()).anomalies.length);
     await expect(page.getByTestId("evidence-empty")).toBeVisible();
-    await expect(page.getByTestId("run-diagnosis")).toBeDisabled();
-    await expect(page.getByTestId("propose-plan")).toBeDisabled();
-    await expect(page.getByTestId("placeholder-investigator")).toHaveAttribute("data-capability-status", "Not implemented");
+    await expect(page.getByTestId("start-ai")).toBeEnabled();
+    await expect(page.getByTestId("generate-plan")).toBeDisabled();
+    await expect(page.getByTestId("planning-blocked")).toContainText("saved Stage 5 report");
+    await expect(page.getByTestId("ai-investigation")).toBeVisible();
     await expect(page.getByTestId("placeholder-execution")).toHaveAttribute("data-capability-status", "Partner integration pending");
 
     await page.getByTestId("collect-evidence").click();
@@ -164,4 +273,23 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await page.getByTestId("dashboard-run-select").selectOption(RUN);
     await expect(page.getByTestId("evidence-item")).toHaveCount(api.total);
   });
+  test("AI investigation queues idempotently, survives refresh, and can be cancelled without a browser worker", async ({ page, request }) => {
+    const endpoint = `/api/investigations/${investigationId}/ai?simulationRunId=${RUN}`;
+    await page.goto(`/dashboard/investigations/${investigationId}?run=${RUN}`);
+    await expect(page.getByTestId("start-ai")).toBeEnabled();
+    await page.getByTestId("start-ai").click();
+    await expect(page.getByTestId("ai-status")).toHaveText("queued");
+    const first = await (await request.get(endpoint)).json();
+    const duplicate = await (await request.post(endpoint, { data: { action: "start" } })).json();
+    expect(duplicate.state.jobId).toBe(first.state.jobId);
+    expect(first.calls).toEqual([]);
+    await page.reload();
+    await expect(page.getByTestId("ai-status")).toHaveText("queued");
+    await page.getByTestId("cancel-ai").click();
+    await expect(page.getByTestId("ai-status")).toHaveText("cancelled");
+    expect((await (await request.get(endpoint)).json()).calls).toEqual([]);
+    expect((await request.get(`/api/investigations/${investigationId}/ai?simulationRunId=${OTHER}`)).status()).toBe(404);
+    await expectLayoutFits(page);
+  });
+
 });

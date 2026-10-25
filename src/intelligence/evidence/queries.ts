@@ -51,7 +51,8 @@ export async function listInvestigationEvidence(investigationId: string, input: 
   const items = docs.map((d) => {
     const detail = byId.get(d.evidenceId) ?? null;
     return { evidence: canonical(d), tool: detail?.tool ?? null, dataOrigin: detail?.dataOrigin ?? null, collectionId: detail?.collectionId ?? null, toolRunId: detail?.toolRunId ?? null,
-      detail: detail?.detail ?? null, warnings: detail?.warnings ?? [], verification: detail?.verification ?? null, input: detail?.input ?? null };
+      detail: detail?.detail ?? null, warnings: detail?.warnings ?? [], verification: detail?.verification ?? null, input: detail?.input ?? null,
+      simulationRunId };
   });
   return { investigationId, businessId: q.businessId, simulationRunId, investigationStatus: inv.status, total, limit: q.limit, offset: q.offset, items, latestCollection: latest };
 }

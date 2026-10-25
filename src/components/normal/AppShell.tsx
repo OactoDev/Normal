@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { RunProvider, useRun } from "./run-context";
 import { RunSelector } from "./RunSelector";
 import { LoadingScreen } from "./LoadingScreen";
@@ -20,13 +20,6 @@ const NAV = [
 function Shell({ children, title, hidePageHeading = false }: { children: ReactNode; title: string; hidePageHeading?: boolean }) {
   const pathname = usePathname();
   const { withRun, runId, unavailable, error } = useRun();
-  const [loader, setLoader] = useState<{ pathname: string; phase: "visible" | "exiting" | "hidden" }>({ pathname, phase: "visible" });
-  const loaderPhase = loader.pathname === pathname ? loader.phase : "visible";
-  useEffect(() => {
-    const fade = window.setTimeout(() => setLoader({ pathname, phase: "exiting" }), 2450);
-    const hide = window.setTimeout(() => setLoader((current) => current.pathname === pathname ? { pathname, phase: "hidden" } : current), 2930);
-    return () => { window.clearTimeout(fade); window.clearTimeout(hide); };
-  }, [pathname]);
   return (
     <div className="normal-app">
       <header className="topbar normal-topbar"><div className="shell normal-topbar-inner">
@@ -48,7 +41,6 @@ function Shell({ children, title, hidePageHeading = false }: { children: ReactNo
         {error ? <div className="alert error">{error}</div> : null}
         {children}
       </main>
-      {loaderPhase !== "hidden" ? <LoadingScreen overlay phase={loaderPhase} motionKey={pathname} /> : null}
     </div>
   );
 }

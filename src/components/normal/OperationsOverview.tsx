@@ -7,6 +7,7 @@ import { money, moneyCompact, num, virtualDate } from "@/lib/format";
 import { api, q, type AnomalyRow, type IncidentRow, type InvestigationRow, type MonitorStatus } from "./api";
 import { useRun } from "./run-context";
 import { NormalLogo } from "./NormalLogo";
+import { PageSkeleton } from "./PageSkeleton";
 
 interface Campaign {
   campaignId: string; name: string; platform: string;
@@ -66,22 +67,26 @@ function SignalRow({ signal, withRun }: { signal: Signal; withRun: (href: string
 
 function CampaignCarousel({ campaigns, metrics, withRun }: { campaigns: Campaign[]; metrics: CampaignMetric[]; withRun: (href: string) => string }) {
   const [activeCampaign, setActiveCampaign] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
   if (campaigns.length === 0) return <article className="card campaign-card" data-testid="campaign-carousel"><div className="campaign-head"><h2>Current Campaigns</h2></div><div className="campaign-empty">No campaign records exist in this run.</div></article>;
-  const visibleCampaigns = campaigns.slice(0, 3);
-  const changeCampaign = (step: number) => setActiveCampaign((current) => (current + step + visibleCampaigns.length) % visibleCampaigns.length);
-  const index = Math.min(activeCampaign, visibleCampaigns.length - 1);
+  const index = Math.min(activeCampaign, campaigns.length - 1);
+  const changeCampaign = (step: number) => {
+    const next = (index + step + campaigns.length) % campaigns.length;
+    setActiveCampaign(next);
+    trackRef.current?.children.item(next)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
   const images = ["nike-run-city.jpg", "nike-run-motion.jpg", "nike-run-street.jpg"];
   return (
     <article className="card campaign-card" aria-roledescription="carousel" aria-label="Current Campaigns" data-testid="campaign-carousel">
       <div className="campaign-head"><h2>Current Campaigns</h2><span className="campaign-run-count">{campaigns.filter((campaign) => campaign.status === "active").length} active · {campaigns.filter((campaign) => campaign.status !== "active").length} paused</span>
-        <div className="campaign-controls"><span>{index + 1} / {visibleCampaigns.length}</span><button onClick={() => changeCampaign(-1)} aria-label="Previous campaign"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.5 4.5-5 5.5 5 5.5" /></svg></button><button onClick={() => changeCampaign(1)} aria-label="Next campaign"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.5 5 5.5-5 5.5" /></svg></button></div>
+        <div className="campaign-controls"><span>{index + 1} / {campaigns.length}</span><button onClick={() => changeCampaign(-1)} aria-label="Previous campaign"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.5 4.5-5 5.5 5 5.5" /></svg></button><button onClick={() => changeCampaign(1)} aria-label="Next campaign"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.5 5 5.5-5 5.5" /></svg></button></div>
       </div>
-      <div className="campaign-track">{visibleCampaigns.map((campaign, campaignIndex) => {
+      <div className="campaign-track" ref={trackRef} role="region" aria-label="Campaign list" tabIndex={0}>{campaigns.map((campaign, campaignIndex) => {
         const metric = metrics.find((item) => item.campaignId === campaign.campaignId);
         const targetCategory = campaign.targetCategory || "All categories";
         const platformLabel = campaign.platform === "meta_ads" ? "Meta" : campaign.platform === "google_ads" ? "Google" : "Ads";
-        return <Link className={`campaign-slide${campaignIndex === index ? " active" : ""}`} key={campaign.campaignId} href={withRun(`/dashboard/campaigns/${encodeURIComponent(campaign.campaignId)}`)} aria-label={`Open ${campaign.name || campaign.campaignId} in the campaign dashboard`} onMouseEnter={() => setActiveCampaign(campaignIndex)}>
-          <Image src={`/assets/${images[campaignIndex]}`} alt="" fill sizes="(max-width: 650px) 82vw, (max-width: 880px) 90vw, 40vw" />
+        return <Link className={`campaign-slide${campaignIndex === index ? " active" : ""}`} key={campaign.campaignId} href={withRun(`/dashboard/campaigns/${encodeURIComponent(campaign.campaignId)}`)} target="_blank" rel="noopener noreferrer" aria-label={`Open ${campaign.name || campaign.campaignId} in Meta Ads Manager in a new tab`} onMouseEnter={() => setActiveCampaign(campaignIndex)}>
+          <Image src={`/assets/${images[campaignIndex % images.length]}`} alt="" fill sizes="(max-width: 650px) 82vw, (max-width: 880px) 35vw, (max-width: 1600px) 25vw, 440px" />
           <span className="campaign-shade" />
           <span className="campaign-status">{campaign.status === "active" ? "Live" : "Paused"}</span>
           <span className="campaign-copy"><small>{platformLabel} · {targetCategory}</small><strong>{campaign.name || campaign.campaignId}</strong><span className="campaign-facts"><span>Budget {money(campaign.dailyBudgetMinor)}/day</span>{metric ? <><span>30d spend {money(metric.spendMinor)}</span><span>{num(metric.attributedOrders)} attributed orders</span></> : <span>No delivery data yet</span>}</span></span>
@@ -145,7 +150,7 @@ export function OperationsOverview() {
   if (loaded && !runId) return <div className="empty" data-testid="overview-empty">No simulation runs exist yet. Create one in the <Link href="/dev/simulator">control room</Link>.</div>;
   const current = result && result.runId === runId ? result : null;
   if (current?.error) return <div className="alert error" data-testid="overview-error">{current.error}</div>;
-  if (!current?.data) return <div className="muted" data-testid="overview-loading">Loading run data…</div>;
+  if (!current?.data) return <PageSkeleton variant="overview" label="Loading operations overview" />;
 
   const { state, breakdown, monitor, incidents, anomalies, investigations } = current.data;
   const total = breakdown.total;
@@ -163,7 +168,7 @@ export function OperationsOverview() {
     { title: "Monitoring completed", detail: monitor.lastAsOf ? `Business metrics evaluated through ${virtualDate(monitor.lastAsOf)}` : "No completed monitoring scan recorded for this run." },
     { title: "Anomalies detected", detail: `${anomalies.total} signals grouped into ${incidents.length} persisted incidents` },
     { title: "Evidence available", detail: `${investigations.total} investigations · ${investigations.items.reduce((count, item) => count + item.investigation.evidenceIds.length, 0)} evidence links` },
-    { title: "AI diagnosis", detail: "Awaiting Mubit integration" },
+    { title: "AI diagnosis", detail: investigations.items.some((item) => item.investigation.diagnosisId) ? `${investigations.items.filter((item) => item.investigation.diagnosisId).length} saved diagnoses in listed investigations · open an investigation to review` : "Open an investigation to start the Mubit investigator" },
   ];
 
   return (
@@ -182,11 +187,9 @@ export function OperationsOverview() {
         <section className="right-column top-column">
           <article className="card signals-card top-signals-card" data-testid="overview-signals">
             <div className="signals-head"><h2>Signals</h2><div className="signals-actions"><span className="attention">{anomalies.total} alerts</span><Link href={withRun("/dashboard/signals")} className="signals-more">View all</Link></div></div>
-            {signalRows.length ? <ul className="signal-list">{signalRows.slice(0, 3).map((signal) => <SignalRow key={signal.id} signal={signal} withRun={withRun} />)}</ul> : <p className="panel-note">No incident or anomaly signals are recorded for this run.</p>}
+            {signalRows.length ? <ul className="signal-list" aria-label="Recent signals" tabIndex={0}>{signalRows.slice(0, 3).map((signal) => <SignalRow key={signal.id} signal={signal} withRun={withRun} />)}</ul> : <p className="panel-note">No incident or anomaly signals are recorded for this run.</p>}
           </article>
         </section>
-
-        <CampaignCarousel campaigns={state.campaigns ?? []} metrics={breakdown.campaigns ?? []} withRun={withRun} />
 
         <section className="left-column bottom-column"><RevenueTrend daily={breakdown.daily ?? []} total={total} /></section>
 
@@ -197,14 +200,15 @@ export function OperationsOverview() {
               { label: "Sessions", value: total ? num(total.counters.sessions) : "—", direction: trendFor(latest?.counters.sessions, previous?.counters.sessions) },
               { label: "Orders", value: total ? num(total.counters.orders) : "—", direction: trendFor(latest?.counters.orders, previous?.counters.orders) },
               { label: "AdSpend", value: total ? moneyCompact(total.counters.adSpendMinor) : "—", direction: trendFor(latest?.counters.adSpendMinor, previous?.counters.adSpendMinor) },
-            ].map((item) => <div className="metric" key={item.label}><span>{item.label}</span><div><strong>{item.value}</strong><Trend direction={item.direction} color={item.direction === "down" ? "red" : "green"} size={15} /></div></div>)}
+            ].map((item) => <div className="metric" key={item.label}><span>{item.label}</span><div><strong title={item.value}>{item.value}</strong><Trend direction={item.direction} color={item.direction === "down" ? "red" : "green"} size={15} /></div></div>)}
           </article>
 
           <article className="card activity-card" data-testid="overview-activity" id="activity">
             <div className="activity-head"><h2>Normal Activity</h2><span>{activity.length} updates</span></div>
-            <ol>{activity.map((item) => <li key={item.title}><strong>{item.title}</strong><span>{item.detail}</span></li>)}</ol>
+            <ol aria-label="Recent activity" tabIndex={0}>{activity.map((item) => <li key={item.title}><strong>{item.title}</strong><span>{item.detail}</span></li>)}</ol>
             <div className="activity-logo"><NormalLogo compact /></div>
           </article>
+          <CampaignCarousel campaigns={state.campaigns ?? []} metrics={breakdown.campaigns ?? []} withRun={withRun} />
         </section>
 
       </div>

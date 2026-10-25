@@ -38,6 +38,11 @@ export const COLLECTIONS = {
   evidenceCollections: "evidence_collections",
   evidenceToolRuns: "evidence_tool_runs",
   evidenceDetails: "evidence_details",
+  investigationJobs: "investigation_jobs",
+  investigationCalls: "investigation_calls",
+  investigationReports: "investigation_reports",
+  externalSources: "external_sources",
+  planningJobs: "planning_jobs",
 } as const;
 
 let indexesReady: Promise<void> | undefined;

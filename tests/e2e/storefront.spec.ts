@@ -9,7 +9,7 @@ test.describe.serial("demo storefront", () => {
 
   test("lists the verified catalogue with provenance and an unaffiliated notice", async ({ page }) => {
     await page.goto("/demo-store");
-    await expect(page.getByText("Nike — Unaffiliated Simulation.").first()).toBeVisible();
+    await expect(page.getByText("Nike names and imagery are used in an unaffiliated synthetic simulation.", { exact: false }).first()).toBeVisible();
     await expect(page.locator("[data-testid^=product-]")).toHaveCount(17);
     await page.getByRole("button", { name: "Football", exact: true }).click();
     await expect(page.locator("[data-testid^=product-]")).toHaveCount(3);

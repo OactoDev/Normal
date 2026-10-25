@@ -31,6 +31,7 @@ const ALLOWED_COLLECTION_KEYS = new Set([
   "detectionObservations", "incidents", "monitorRuns", "monitorState", "monitoringWindows", "monitoringJobs", "monitoringWorkers",
   // Evidence retrieval owns these; diagnoses/plans are read (never written) by historical-incident retrieval.
   "evidence", "evidenceCollections", "evidenceToolRuns", "evidenceDetails", "diagnoses", "plans",
+  "investigationJobs", "investigationCalls", "investigationReports", "externalSources",
 ]);
 
 describe("detector data boundary (code inspection)", () => {

@@ -26,7 +26,7 @@ export interface StageCapability {
 export interface Capabilities { businessId: string; simulationRunId: string | null; generatedAt: string; detectorVersion: string; tools: Array<{ name: string; title: string; description: string; category: string }>; stages: StageCapability[] }
 export interface IncidentRow { incidentId: string; title: string; status: string; polarity: string; primaryTheme: string; severity: { level: Severity; score: number }; findingIds: string[]; anomalyIds: string[]; investigationId: string | null; onsetAt: string; lastTriggeredAt: string; summary: string }
 export interface AnomalyRow { anomaly: { anomalyId: string; metric: string; direction: string; severity: Severity; status: string; actualValue: number; baselineValue: number; changePercent: number; detectedAt: string }; finding: { label: string; segmentLabel: string } | null }
-export interface InvestigationRow { investigation: { investigationId: string; title: string; status: string; anomalyIds: string[]; evidenceIds: string[]; startedAt: string; updatedAt: string }; simulationRunId: string; incident: { severity: { level: Severity; score: number }; primaryTheme: string; status: string } | null }
+export interface InvestigationRow { investigation: { investigationId: string; title: string; status: string; anomalyIds: string[]; evidenceIds: string[]; startedAt: string; updatedAt: string; diagnosisId?: string }; simulationRunId: string; incident: { severity: { level: Severity; score: number }; primaryTheme: string; status: string } | null }
 export interface Bundle {
   investigation: { investigationId: string; title: string; status: string; startedAt: string; updatedAt: string; anomalyIds: string[]; evidenceIds: string[]; businessId: string };
   simulationRunId: string; incident: IncidentRow & { affected: { campaigns: string[]; products: string[]; channels: string[]; categories: string[] } } | null;
@@ -39,6 +39,7 @@ export interface EvidenceItem {
   evidence: { businessId: string; evidenceId: string; category: string; title: string; observation: string; window?: { startAt: string; endAt: string }; measurements: Measurement[]; sourceRecords: Array<{ collection: string; recordId: string; sourceUrl?: string }>; retrievedAt: string };
   tool: string | null; dataOrigin: string | null; collectionId: string | null; toolRunId: string | null; detail: Record<string, unknown> | null; warnings: string[]; input: Record<string, unknown> | null;
   verification: { passed: boolean; checks: Array<{ name: string; passed: boolean; note: string }>; resolvedSources: number; unresolvedSources: string[] } | null;
+  simulationRunId?: string; campaignMetadata?: Array<{ campaignId: string; name: string; platform: string }>;
 }
 export interface EvidenceList { total: number; items: EvidenceItem[]; investigationStatus: string; latestCollection: CollectionDoc | null }
 export interface CollectionDoc { collectionId: string; mode: string; cutoff: string; status: string; startedAt: string; completedAt: string | null; selectedTools: Array<{ tool: string; reason: string; role: string }>; completedTools: string[]; failedTools: string[]; emptyTools: string[]; evidenceIds: string[]; warnings: string[]; attempt: number; windows: { incident: { startAt: string; endAt: string }; baseline: { startAt: string; endAt: string } | null }; error?: string | null }

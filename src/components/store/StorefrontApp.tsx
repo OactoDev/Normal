@@ -7,6 +7,7 @@ import { ProductCard } from "@/components/store/ProductCard";
 import { ProductDrawer } from "@/components/store/ProductDrawer";
 import { CartDrawer } from "@/components/store/CartDrawer";
 import { NormalLogo } from "@/components/normal/NormalLogo";
+import { PageSkeleton } from "@/components/normal/PageSkeleton";
 import type { CartLine, StoreCatalogue, StoreOrder, StoreProduct } from "@/components/store/types";
 
 const CART_KEY = "normal.demo-store.cart.v1";
@@ -152,7 +153,7 @@ export function StorefrontApp() {
           ))}
         </div>
 
-        {catalogue === null && !error ? <div className="empty"><span className="spinner" /> Loading catalogue…</div> : null}
+        {catalogue === null && !error ? <PageSkeleton variant="catalogue" label="Loading product catalogue" /> : null}
         {catalogue && products.length === 0 ? <div className="empty">No products match.</div> : null}
         <section className="grid product-grid" aria-label="Products">
           {products.map((p) => <ProductCard key={p.productId} product={p} onOpen={() => setSelected(p)} />)}

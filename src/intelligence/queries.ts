@@ -6,6 +6,8 @@ import { Anomaly, Investigation, MetricName, MetricSnapshot, type AnomalyT, type
 import { COLLECTIONS } from "@/lib/collections";
 import { getDb } from "@/lib/mongodb";
 import type { FindingDoc, IncidentDoc } from "@/intelligence/detection/persistence";
+import { groupSignalObservations, type SignalGroup, type SignalObservationInput } from "@/intelligence/signals/grouping";
+import { campaignDisplayNames } from "@/lib/campaign-display-names";
 
 const BusinessId = z.string().min(1).max(64).regex(/^[a-z0-9_]+$/).default("nike_demo");
 const RunId = z.string().min(1).max(64).regex(/^[a-z0-9_]+$/);
@@ -37,6 +39,14 @@ export const IncidentQuery = z.object({
   ...Page,
 }).strict();
 
+export const SignalGroupQuery = z.object({
+  businessId: BusinessId, simulationRunId: RunId.optional(),
+  status: z.string().min(1).max(40).optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+  metric: MetricName.optional(), category: z.enum(THEMES).optional(),
+  search: z.string().max(120).optional(), ...Page,
+}).strict();
+
 /** Strips storage-envelope fields so API responses carry exactly the canonical schema. */
 const canonicalAnomaly = (d: Record<string, unknown>): AnomalyT => { const { simulationRunId: _r, _id: _i, ...rest } = d; void _r; void _i; return Anomaly.parse(rest); };
 const canonicalInvestigation = (d: Record<string, unknown>): InvestigationT => { const { simulationRunId: _r, _id: _i, ...rest } = d; void _r; void _i; return Investigation.parse(rest); };
@@ -46,6 +56,9 @@ export interface AnomalyListItem {
   anomaly: AnomalyT;
   simulationRunId: string;
   finding: Pick<FindingDoc, "findingId" | "signalId" | "label" | "theme" | "segment" | "segmentLabel" | "polarity" | "reason" | "incidentId" | "onsetAt" | "status"> | null;
+  signalFamilyId: string;
+  signalLabel: string;
+  entityName: string;
 }
 
 export async function listAnomalies(input: unknown, dbOverride?: Db) {
@@ -69,10 +82,89 @@ export async function listAnomalies(input: unknown, dbOverride?: Db) {
     col.find(filter, { projection: { _id: 0 } }).sort({ detectedAt: -1, anomalyId: 1 }).skip(q.offset).limit(q.limit).toArray(),
   ]);
   const findings = new Map((await db.collection<FindingDoc>(COLLECTIONS.detectionFindings)
-    .find({ businessId: q.businessId, anomalyId: { $in: docs.map((d) => d.anomalyId) } }, { projection: { _id: 0, findingId: 1, anomalyId: 1, signalId: 1, label: 1, theme: 1, segment: 1, segmentLabel: 1, polarity: 1, reason: 1, incidentId: 1, onsetAt: 1, status: 1 } })
+    .find({ businessId: q.businessId, ...(q.simulationRunId ? { simulationRunId: q.simulationRunId } : {}), anomalyId: { $in: docs.map((d) => d.anomalyId) } }, { projection: { _id: 0, simulationRunId: 1, findingId: 1, anomalyId: 1, signalId: 1, label: 1, theme: 1, segment: 1, segmentLabel: 1, polarity: 1, reason: 1, incidentId: 1, onsetAt: 1, status: 1 } })
     .toArray()).map((f) => [f.anomalyId as string, f]));
-  const items: AnomalyListItem[] = docs.map((d) => ({ anomaly: canonicalAnomaly(d), simulationRunId: d.simulationRunId, finding: (findings.get(d.anomalyId) as AnomalyListItem["finding"]) ?? null }));
+  const campaignRefs = [...findings.values()].flatMap((finding) => finding.segment.kind === "campaign" && finding.segment.id
+    ? [{ campaignId: finding.segment.id, simulationRunId: finding.simulationRunId }]
+    : []);
+  const campaignNames = await campaignDisplayNames(db, q.businessId, campaignRefs);
+  const items: AnomalyListItem[] = docs.map((doc) => {
+    const anomaly = canonicalAnomaly(doc);
+    const finding = (findings.get(doc.anomalyId) as AnomalyListItem["finding"]) ?? null;
+    const entityName = finding?.segment.kind === "campaign"
+      ? campaignNames.get(`${doc.simulationRunId}:${finding.segment.id}`) ?? "Campaign unavailable"
+      : finding?.segmentLabel ?? "Whole business";
+    return {
+      anomaly,
+      simulationRunId: doc.simulationRunId,
+      finding,
+      signalFamilyId: finding?.signalId ?? anomaly.metric,
+      signalLabel: finding?.label ?? anomaly.metric.replaceAll("_", " "),
+      entityName,
+    };
+  });
   return { total, limit: q.limit, offset: q.offset, items };
+}
+
+/** Build presentation groups from complete, selected-run records; original anomalies remain untouched. */
+export async function listSignalGroups(input: unknown, dbOverride?: Db) {
+  const q = SignalGroupQuery.parse(input);
+  const db = dbOverride ?? (await getDb());
+  const scope = { businessId: q.businessId, ...(q.simulationRunId ? { simulationRunId: q.simulationRunId } : {}) };
+  const [anomalyDocs, findingDocs, incidentDocs, investigationDocs] = await Promise.all([
+    db.collection<AnomalyT & { simulationRunId: string }>(COLLECTIONS.anomalies).find(scope, { projection: { _id: 0 } }).sort({ detectedAt: -1, anomalyId: 1 }).toArray(),
+    db.collection<FindingDoc>(COLLECTIONS.detectionFindings).find({ ...scope, anomalyId: { $ne: null } }, { projection: { _id: 0 } }).toArray(),
+    db.collection<IncidentDoc>(COLLECTIONS.incidents).find(scope, { projection: { _id: 0, history: 0 } }).toArray(),
+    db.collection<InvestigationT & { simulationRunId: string }>(COLLECTIONS.investigations).find(scope, { projection: { _id: 0 } }).toArray(),
+  ]);
+  const findings = new Map(findingDocs.map((finding) => [`${finding.simulationRunId}:${finding.anomalyId}`, finding]));
+  const incidents = new Map(incidentDocs.map((incident) => [`${incident.simulationRunId}:${incident.incidentId}`, incident]));
+  const investigationsByAnomaly = new Map<string, InvestigationT & { simulationRunId: string }>();
+  for (const investigation of investigationDocs) for (const anomalyId of investigation.anomalyIds) investigationsByAnomaly.set(`${investigation.simulationRunId}:${anomalyId}`, investigation);
+  const campaignRefs = findingDocs.flatMap((finding) => finding.segment.kind === "campaign" && finding.segment.id
+    ? [{ campaignId: finding.segment.id, simulationRunId: finding.simulationRunId }]
+    : []);
+  const campaignNames = await campaignDisplayNames(db, q.businessId, campaignRefs);
+
+  const observations: SignalObservationInput[] = anomalyDocs.map((doc) => {
+    const anomaly = canonicalAnomaly(doc);
+    const key = `${doc.simulationRunId}:${doc.anomalyId}`;
+    const finding = findings.get(key);
+    const linkedInvestigation = investigationsByAnomaly.get(key);
+    const rawIncident = finding?.incidentId ? incidents.get(`${doc.simulationRunId}:${finding.incidentId}`) : incidentDocs.find((incident) => incident.simulationRunId === doc.simulationRunId && incident.anomalyIds.includes(doc.anomalyId));
+    const incident = rawIncident?.status === "merged" && rawIncident.mergedInto
+      ? incidents.get(`${doc.simulationRunId}:${rawIncident.mergedInto}`) ?? rawIncident
+      : rawIncident;
+    const investigationId = incident?.investigationId ?? linkedInvestigation?.investigationId ?? null;
+    const investigation = linkedInvestigation?.investigationId === investigationId ? linkedInvestigation : investigationDocs.find((candidate) => candidate.investigationId === investigationId && candidate.simulationRunId === doc.simulationRunId);
+    const segment = finding?.segment ?? null;
+    const entityName = segment?.kind === "global" ? "Whole business"
+      : segment?.kind === "campaign" ? campaignNames.get(`${doc.simulationRunId}:${segment.id}`) ?? finding?.segmentLabel ?? "Campaign unavailable"
+      : finding?.segmentLabel ?? "Business-wide";
+    return {
+      businessId: doc.businessId, simulationRunId: doc.simulationRunId, anomaly,
+      signalId: finding?.signalId ?? null, signalLabel: finding?.label ?? anomaly.metric.replaceAll("_", " "),
+      theme: finding?.theme ?? incident?.primaryTheme ?? null,
+      segment: segment ? { kind: segment.kind, ...(segment.id ? { id: segment.id } : {}) } : null,
+      segmentLabel: finding?.segmentLabel ?? null, entityName,
+      incident: incident ? {
+        incidentId: incident.incidentId, title: incident.title, summary: incident.summary, status: incident.status,
+        primaryTheme: incident.primaryTheme, investigationId: incident.investigationId,
+        severity: incident.severity, onsetAt: incident.onsetAt, lastTriggeredAt: incident.lastTriggeredAt, resolvedAt: incident.resolvedAt,
+      } : null,
+      investigation: investigation ? { investigationId: investigation.investigationId, title: investigation.title, status: investigation.status } : null,
+    };
+  });
+  const completeGroups = groupSignalObservations(observations);
+  const filtered = completeGroups.filter((group) => {
+    const text = `${group.title} ${group.incidentTitle ?? ""} ${group.metric} ${group.theme ?? ""} ${group.status} ${group.observations.map((observation) => observation.entityName).join(" ")}`.toLowerCase();
+    return (!q.status || group.status === q.status || group.observations.some((observation) => observation.status === q.status))
+      && (!q.severity || group.severity === q.severity)
+      && (!q.metric || group.metric === q.metric)
+      && (!q.category || group.theme === q.category)
+      && (!q.search || text.includes(q.search.trim().toLowerCase()));
+  });
+  return { total: filtered.length, limit: q.limit, offset: q.offset, items: filtered.slice(q.offset, q.offset + q.limit) satisfies SignalGroup[] };
 }
 
 /** Canonical signal detail plus the exact metric snapshots and finding record used by its detector. */
