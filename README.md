@@ -12,6 +12,10 @@ Our hackathon demonstration uses an **Nike shop simulation**. The orders, custom
 
 ## Start here
 
+<!-- current-demo:start -->
+**Watch the current product demo:** [Normal — continuous product and Mubit console recording](docs/demo/Normal_NightShift_Demo.mp4) · **1:50 · 4.98 MB**. The recording shows the dashboard, evidence, plan review, approved simulated actions, verified receipts and the signed-in Mubit console. It uses the requested Kris Sah voice with natural delivery and no added overlays or music. [Demo details and limits](docs/demo/README.md) · [Media verification](docs/demo/verification.json).
+<!-- current-demo:end -->
+
 If you have two minutes, follow this evidence trail:
 
 1. **The investigation:** [saved Mubit report](docs/stage5-runs/stage5_1792885194280.json) — five model calls, six verified internal evidence records and no unresolved citations.

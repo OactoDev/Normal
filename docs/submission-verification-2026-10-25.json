@@ -45,10 +45,10 @@
     "compatibleStatus": "docs/training/source-support-gemini-4-argon-compat-v1/console-status.json"
   },
   "video": {
-    "file": "Normal_Clean_Screen_Recording.mp4",
-    "durationSeconds": 105.04,
-    "sizeBytes": 5102772,
-    "sha256": "49fbdf5ffef1a76f70e4cccb1f0a1396a8a72fa69b667a9b442fc7da503d0b0c",
+    "file": "docs/demo/Normal_NightShift_Demo.mp4",
+    "durationSeconds": 110.16,
+    "sizeBytes": 4980760,
+    "sha256": "17fa3459fc2de48a177a9f6add5529feaa8e124f6e170cdeeb8bd41d96c37a0b",
     "completeDecode": true
   },
   "submissionReceiptVerified": false,
@@ -61,7 +61,7 @@
     "src/intelligence/model-settings.ts": "bacac28d18531a6a7aacc09bfb63a5bab9df12d131423b55326a7e1c85f7cbc3"
   },
   "publicationChecks": {
-    "localMarkdownLinksChecked": 133,
+    "localMarkdownLinksChecked": 142,
     "missingPublishedTargets": 0,
     "credentialPatternMatches": 0,
     "accountAddressMatches": 0,
