@@ -1,9 +1,16 @@
-# Submission reconciliation — 25 October 2026
+# Submission verification — 25 October 2026
 
-Reconciled remote main through `1d850e6` with local Gemini 4 Argon routing, shared server model settings, UI and storefront fixes, isolated browser fixtures, and training experiment support. Remote ledger validation, offline reporting, frozen-protocol checks and recovery tests are preserved.
+Checked at 2026-10-25T08:27:56.299687Z, against main `07f966a` plus the Gemini training evidence and worker/experiment safeguards included in this update. The [machine-readable record](submission-verification-2026-10-25.json) preserves commands, results and source checksums.
 
-Fresh checks on the combined implementation: production build and TypeScript passed; 43 focused provider, training, CLI recovery and campaign-trend tests passed; ESLint passed with zero errors and 14 existing warnings. The provider tests explicitly isolate transport configuration from the local training environment.
+- `npm run verify`: **385/385 tests across 62 files passed**, contract typechecking and all **15/15** examples passed, TypeScript passed, ESLint **0 errors and 14 existing warnings**.
+- `npm run test:e2e`: **66/66 passed in 3.6 minutes**, covering desktop Chromium and Pixel 7. It used the isolated `normal_e2e` database, the repository's verified form-fill harness and saved model fixtures; it made no new model requests.
+- `NORMAL_NEXT_DIST_DIR=.next/submission-build npm run build`: production build passed. The separate build directory preserves the running demo server; generated extra TypeScript include paths were removed after the check.
+- Every current model stage is configured to **Gemini 4 Argon (`gemini-4-argon`) through Mubit**, using the native Gemini transport. Both workers were verified running with those settings. The optional compatible transport has its own validated Gemini task and independent saved baseline.
+- Both Gemini source-support runs completed **40 teacher calls** and **24 held-out baseline cases**. Each baseline matched **18/24 synthetic labels (75%)**, with 24/24 valid responses. Both Mubit tasks still have **0 kept, 40 waiting/queued and 3 reviews running; first training not started**. [Actual results and limitations](training/gemini-source-support-evaluation-2026-10-25.md), [native console evidence](training/source-support-gemini-4-argon-v1/console/submission-queue.png). No adapter improvement or production savings is claimed.
+- Historical workflow/model evidence retains the actual model IDs that produced it. New public console snapshots exclude the account sidebar at capture time; private environment files and full account-bearing captures are excluded from this update.
 
-Earlier complete saved checks: 373 unit/integration tests and 66 browser tests passed. Those complete suites were not repeated for this merge.
+Publication checks verified **133 local Markdown targets** in the staged repository. Targeted credential/account-address checks found no matches in staged text; this is not an exhaustive security audit. Private environment files were not staged.
 
-Model names in historical evidence retain their actual identities. The continuing Gemini experiment and its partial artifacts are not a completed improvement result. The demo MP4 is supplied separately through the organizer upload page. No private environment file or API credential is included.
+The final upload asset is `Normal_Clean_Screen_Recording.mp4` in the parent workspace: **105.04 seconds**, **5,102,772 bytes**, H.264/AAC, 1488×720. Its SHA-256 matches `49fbdf5ffef1a76f70e4cccb1f0a1396a8a72fa69b667a9b442fc7da503d0b0c`. A fresh complete audio/video decode passed without FFmpeg errors. It is supplied separately through the organizer upload page, rather than committed as a video blob.
+
+The background Gemini adapter evaluation is active every 15 minutes and will evaluate a real passing version against its matching frozen baseline. Final organizer-form submission/upload and a receipt have **not** been verified by this check. The older public deployment is not evidence that this exact revision is deployed; use the current repository and verified demo materials for the submission.

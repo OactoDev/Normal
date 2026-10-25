@@ -97,7 +97,8 @@ function report() {
   if (consoleStatus?.evidencePaths.some((path) => !existsSync(path))) throw new Error("missing_console_status_evidence");
   const comparisonPath = `${directory}/adapter-comparison.json`;
   const adapterComparison = existsSync(comparisonPath) ? JSON.parse(readFileSync(comparisonPath, "utf8")) : null;
-  if (adapterComparison && (adapterComparison.datasetHash !== datasetHash || adapterComparison.fingerprint !== fingerprint || adapterComparison.model !== model)) throw new Error("saved_comparison_identity_mismatch");
+  if (adapterComparison && (adapterComparison.datasetHash !== datasetHash || adapterComparison.fingerprint !== fingerprint || adapterComparison.model !== model
+    || (model.startsWith("gemini-") && adapterComparison.transport !== transport))) throw new Error("saved_comparison_identity_mismatch");
   const result = { generatedAt: new Date().toISOString(), task: SOURCE_TASK, model, transport, datasetHash, fingerprint,
     liveConfiguration: { model: currentConfig.investigatorModel, reasoning: currentConfig.reasoning, transport: liveTransport, matchesFrozenExperiment: currentConfig.investigatorModel === model && currentConfig.reasoning === reasoning && liveTransport === transport },
     baseline: score(cases.filter((c) => c.split === "test"), baseline),
@@ -164,11 +165,13 @@ async function main() {
     const file = process.argv[3];
     if (!file) throw new Error("compare requires a console-observed adapter results JSON file");
     const imported = z.object({ origin: z.literal("mubit_console_try_models"), task: z.literal(SOURCE_TASK), model: z.string(), fingerprint: z.string(), datasetHash: z.string(),
+      transport: z.enum(["native", "openai"]).optional(),
       adapterVersionId: z.string().min(1), taskId: z.string().min(1), capturedAt: z.string().datetime(),
       consoleEvidencePaths: z.array(z.string().min(1)).min(1),
       results: z.array(z.object({ caseId: z.string(), inputHash: z.string(), output: z.unknown(), latencyMs: z.number().finite().nonnegative().optional(), totalTokens: z.number().finite().int().nonnegative().nullable().optional(), costUsd: z.number().finite().nonnegative().nullable().optional(), error: z.string().optional() }).strict()),
     }).strict().parse(JSON.parse(readFileSync(file, "utf8")));
-    if (imported.model !== model || imported.fingerprint !== fingerprint || imported.datasetHash !== datasetHash) throw new Error("adapter_experiment_identity_mismatch");
+    if (imported.model !== model || imported.fingerprint !== fingerprint || imported.datasetHash !== datasetHash
+      || (model.startsWith("gemini-") && imported.transport !== transport)) throw new Error("adapter_experiment_identity_mismatch");
     if (imported.consoleEvidencePaths.some((path) => !existsSync(path))) throw new Error("missing_console_evidence");
     const heldout = cases.filter((c) => c.split === "test");
     for (const row of imported.results) {

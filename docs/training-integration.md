@@ -2,6 +2,8 @@
 
 Current application configuration: **Gemini 4 Argon (`gemini-4-argon`) through Mubit** for all model stages. Historical results below retain their actual model IDs and do not establish Gemini accuracy or adapter improvement.
 
+The [new Gemini run](training/gemini-source-support-evaluation-2026-10-25.md) completed 40 teacher calls and a separate 24-case baseline on each of two Gemini transports. Both baselines matched 18/24 synthetic labels (75%). Mubit created separate Gemini source-support tasks for both routes, but each still has 0 kept examples and first training not started. Adapter improvement remains unmeasured. The application stays on native Gemini; the compatible route is optional. The historical results below are preserved.
+
 Recorded 25 October 2026. Scope: the existing production task `normal.source_support.v1`, not the full investigator, root-cause diagnosis or planner.
 
 ## What actually ran

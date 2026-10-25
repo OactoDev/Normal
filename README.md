@@ -64,7 +64,9 @@ Normal uses Mubit as the gateway for its model requests. Monitoring and anomaly 
 | Compare responses | The separate [planner](src/planner/service.ts) sends a completed, non-provisional diagnosis, scoped evidence, current targets and registered action capabilities to `MUBIT_PLANNER_MODEL`. It asks for distinct strategies, including further investigation or no action. | [Deterministic validation](src/planner/validation.ts) checks evidence, target state, parameters, dependencies and safety limits. A person selects and approves an exact plan version before Normal's restricted adapters can act. Planning itself makes no business change. |
 | Research public context, when enabled | The [research path](src/intelligence/investigator/research.ts) sends a bounded public topic, geography and time window through Mubit's Gemini endpoint using `MUBIT_RESEARCH_MODEL` and Google Search grounding. | Model-suggested URLs are only discovery candidates. Normal separately retrieves allowed HTTPS pages and checks dates, excerpts and claim support. Public context cannot establish the cause of a synthetic incident. |
 
-Normal is configured to use **Gemini 4 Argon (`gemini-4-argon`) through Mubit** for investigation, source-support checks, diagnosis, solution planning and optional grounded research. The [provider](src/intelligence/investigator/provider.ts) uses Mubit's native `/gemini/v1beta/models/gemini-4-argon:generateContent` route by default. Set `MUBIT_GEMINI_TRANSPORT=openai` to use the Gemini `/gemini/v1beta/openai/chat/completions` route for console training capture. Both routes validate structured responses locally. See [Mubit's Gemini connection guide](https://docs.mubit.ai/guides/connect-gemini). All four server-side model settings in [.env.example](.env.example) default to Gemini 4 Argon; never expose `MUBIT_API_KEY` through a `NEXT_PUBLIC_` variable.
+Normal is configured to use **Gemini 4 Argon (`gemini-4-argon`) through Mubit** for investigation, source-support checks, diagnosis, solution planning and optional grounded research. The [provider](src/intelligence/investigator/provider.ts) uses Mubit's native `/gemini/v1beta/models/gemini-4-argon:generateContent` route by default. Set `MUBIT_GEMINI_TRANSPORT=openai` to use the Gemini `/gemini/v1beta/openai/chat/completions` route with complete request/reply display in the console. Both routes have verified Gemini training tasks and validate structured responses locally. See [Mubit's Gemini connection guide](https://docs.mubit.ai/guides/connect-gemini). All four server-side model settings in [.env.example](.env.example) default to Gemini 4 Argon; never expose `MUBIT_API_KEY` through a `NEXT_PUBLIC_` variable.
+
+The [Gemini source-support pilot](docs/training/gemini-source-support-evaluation-2026-10-25.md) completed two transport runs: 40 teacher calls and 24 held-out baseline cases per route, each scoring 18/24 against the authored synthetic labels. Both Gemini tasks are awaiting Mubit review with 0 kept examples; first training has not started, so adapter improvement remains unmeasured.
 
 Historical request and evaluation artifacts retain the model IDs that actually produced them. They document earlier runs and do not establish Gemini 4 Argon accuracy or adapter improvement.
 
@@ -82,21 +84,22 @@ To exercise these paths locally, configure `MUBIT_API_KEY` and the relevant mode
 
 ### Adapter training: what the console actually shows
 
-We checked the training path and kept the results, including the failure. These are two separate Mubit tasks:
+We checked the training path and kept the results, including the failure. The diagnostic, historical source-support and current Gemini tasks remain separate:
 
 | Task | Recorded result | What it means |
 | --- | --- | --- |
 | Existing diagnostic adapter, `ad_lane_0026fbd6`, v1 | Mubit displays **Passed**, with 100% teacher agreement on **nine** test cases. No production request path is linked. | Mubit produced and tested an adapter. This is its own small teacher-agreement check, not proof of better diagnosis. |
 | Diagnostic comparison on six new synthetic cases | The available reference matched **6/6** authored primary conclusions; the adapter matched **5/6**. It mistook a tracking problem for checkout failure. | We found a concrete error and did not promote the adapter. The reference was `gemini-3.8-flash`; the original teacher, `gemini-4-argon`, was unavailable. These agent-reviewed counts are not independently adjudicated accuracy. |
-| New source-support pilot, `normal.source_support.v1` | **40/40** collection calls completed. The console at **07:22 UTC, 25 October 2026** showed **0 kept, 0 rejected, 40 awaiting review; first training not started**. A separate provider baseline matched **15/24** authored labels. | Collection works; this task has no trained version to compare yet. The 24 held-out cases were excluded from training storage. |
+| Historical source-support pilot, `gpt-6-luna` | **40/40** collection calls completed. The console at **07:22 UTC, 25 October 2026** showed **0 kept, 0 rejected, 40 awaiting review; first training not started**. A separate provider baseline matched **15/24** authored labels. | Collection works; this task has no trained version to compare yet. The 24 held-out cases were excluded from training storage. |
+| Current Gemini 4 Argon source-support pilots | **40/40** teacher calls per route, plus **18/24 (75%)** held-out rubric agreement on each route. At the latest saved check, both tasks show **0 kept, 40 awaiting review; first training not started**. | The baseline is complete. Adapter improvement remains unmeasured; held-out calls were metadata-only. [Full Gemini evaluation](docs/training/gemini-source-support-evaluation-2026-10-25.md). |
 
 ![Mubit diagnostic adapter console showing a passed latest training result and nine teacher-agreement test cases](docs/training/diagnostic-adapter-v1/console/training-result.png)
 
 *Existing diagnostic adapter: the latest training result says Passed. The same console shows no linked production request path. The displayed 100% belongs to Mubit’s nine-case check.*
 
-![Mubit source-support console showing 40 calls, zero kept examples and first training not started](docs/training/source-support-v1/console/recheck-2026-10-25-0722.jpg)
+![Gemini 4 Argon source-support task showing 40 usable calls, zero kept examples and first training not started](docs/training/source-support-gemini-4-argon-v1/console/submission-queue.png)
 
-*Rechecked at 07:22 UTC on 25 October 2026: all 40 calls are present, with 40 reviews queued and 3 running. First training has not started; there is no source-support adapter version to test yet. The sidebar’s three adapters belong to the workspace, not to this task.*
+*Current Gemini 4 Argon task: 40 usable calls, 40 waiting for review, 3 running, and first training not started. The linked status file records the observation timestamp. The workspace’s three existing adapters belong to other tasks.*
 
 ![Mubit side-by-side comparison showing the reference identifying a tracking problem while the diagnostic adapter selects checkout failure](docs/training/diagnostic-adapter-v1/console/tracking-artifact.png)
 
@@ -146,9 +149,9 @@ Across the 15 healthy runs, one incident was recorded. Checkout escalation and s
 | Stage 8 outcome assessment | **27/27 focused tests** and **1/1** desktop acceptance; build and TypeScript passed | [Stage 8 verification](docs/stage8-verification.md) |
 | Investigation decision canvas | **4/4** focused desktop checks; TypeScript and build passed | [Canvas verification](docs/investigation-redesign-verification.md) |
 | Adapter-training integration | **83/83 focused tests**, TypeScript, production build, focused lint and **15/15** contract examples passed; saved pilot recomputed offline | [Training validation and reproduction](docs/training-integration.md#validation) |
-| Full regression | The latest saved complete run passed **373/373 tests across 61 files**, and the saved browser run passed **66/66**. After reconciling main and Gemini, the production build and **43 focused tests** passed; the complete suites were not repeated for the merge. | [Submission verification](docs/submission-verification-2026-10-25.md), [historical results](docs/stage5-verification.md#focused-verification-policy-and-latest-results) |
+| Full regression | Fresh submission checks passed **385/385 tests across 62 files** and **66/66 browser tests across desktop and mobile**. Contracts (15/15), TypeScript, ESLint (0 errors, 14 warnings) and the isolated production build passed. | [Submission verification](docs/submission-verification-2026-10-25.md), [historical results](docs/stage5-verification.md#focused-verification-policy-and-latest-results) |
 
-The focused test counts overlap in places and should not be added together. Stage 8 and the revised investigation canvas have no recorded mobile/tablet run or full regression. The canvas report also records a failed global unchanged-data guard while other workers changed monitoring state; it does not claim global preservation.
+The focused test counts overlap in places and should not be added together. The original stage-specific reports predate the complete desktop/mobile regression; the current submission verification records the latest full suite. The canvas report also records a failed global unchanged-data guard while other workers changed monitoring state; it does not claim global preservation.
 
 ## Architecture
 
