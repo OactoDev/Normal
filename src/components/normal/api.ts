@@ -46,6 +46,11 @@ export interface ToolRun { toolRunId: string; collectionId: string; tool: string
 export interface Trace { investigationStatus: string; evidenceIds: string[]; collections: CollectionDoc[]; toolRuns: ToolRun[] }
 export interface CollectionSummary { collectionId: string; status: string; reused: boolean; cutoff: string; evidenceIds: string[]; outcomes: Array<{ tool: string; status: string; durationMs: number; evidenceIds: string[]; error: string | null; emptyResult: string | null }>; warnings: string[] }
 
+export interface DiagnosisHypothesis { cause: string; strength: "weak" | "moderate" | "strong"; evidenceIds: string[]; counterEvidenceIds: string[]; explanation: string }
+export interface DiagnosisRecord { diagnosisId: string; investigationId: string; primaryCause: string; hypotheses: DiagnosisHypothesis[]; summary: string; missingEvidence: string[]; requiresReview: boolean; modelCallId: string; createdAt: string }
+export interface ModelCallRecord { modelCallId: string; providerModel: string; modelKind: "provider" | "adapter"; mubitRequestId?: string; instructionsFingerprint: string; inputEvidenceIds: string[]; inputTokens?: number; outputTokens?: number; latencyMs?: number; createdAt: string }
+export interface DiagnosisResult { diagnosis: DiagnosisRecord | null; modelCall: ModelCallRecord | null }
+
 export const sevClass = (s: Severity | string) => (s === "critical" ? "danger" : s === "high" ? "warn" : s === "medium" ? "accent" : "");
 export const statusClass = (s: StageCapability["status"] | string) => (s === "operational" || s === "completed" ? "ok" : s === "running" ? "accent" : s === "failed" ? "danger" : s === "waiting_for_data" || s === "partial" ? "warn" : "");
 export const STATUS_LABEL: Record<string, string> = { operational: "Operational", waiting_for_data: "Waiting for data", running: "Running", failed: "Failed", not_implemented: "Not implemented", partner_pending: "Partner integration pending" };

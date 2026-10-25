@@ -21,6 +21,8 @@ Normal uses AI to diagnose business problems, decide which actions are appropria
 
 The goal is for Normal to become increasingly effective at understanding the types of problems businesses encounter repeatedly.
 
+**Running today, from anomaly to diagnosis:** the simulator's events are monitored, the detector opens an investigation, read-only tools collect evidence, and the [Mubit investigator](src/intelligence/investigator/diagnose.ts) diagnoses it. Its [client](src/intelligence/investigator/mubit.ts) sends every call to Mubit's Gemini route (`https://api.mubit.ai/gemini/v1beta`, model `gemini-4-argon`, temperature 0) with `MUBIT_API_KEY`. The answer must match the shared `DiagnosisModelOutput` contract and cite only evidence that was sent, or nothing is saved. In the investigation workspace, press **Collect evidence**, then **Run Mubit diagnosis**: you get competing hypotheses with supporting and contradicting evidence, plus the Mubit request ID.
+
 # Architecture Flowchart
 
 <img width="5760" height="3240" alt="Architecture-2" src="https://github.com/user-attachments/assets/7fe85851-bedc-466a-84c1-6ab2cc665fc5" />
