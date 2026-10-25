@@ -99,8 +99,8 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     const signalBox = (await signals.boundingBox())!;
     const slides = await campaigns.locator(".campaign-slide").all();
     expect(slides.length).toBeGreaterThan(3);
-    const first = (await slides[0].boundingBox())!;
-    const second = (await slides[1].boundingBox())!;
+    // Read both cards in one frame so the shared entrance animation cannot skew their relative positions.
+    const [first, second] = await campaigns.locator(".campaign-slide").evaluateAll(elements => elements.slice(0, 2).map(element => { const {x, y, width, height} = element.getBoundingClientRect(); return {x, y, width, height}; }));
     await expect.poll(async () => page.locator(".revenue-card .bar").first().evaluate((bar) => bar.getBoundingClientRect().height)).toBeGreaterThan(10);
     if (isMobile) {
       expect(campaignBox.y).toBeGreaterThan(signalBox.y);
@@ -113,11 +113,16 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
       expect(campaignBox.x).toBeGreaterThan(signalBox.x + signalBox.width - 2);
       expect(second.y).toBeGreaterThan(first.y + first.height - 2);
       expect(Math.max(...Object.values(loadedRects).map((rect) => rect.y + rect.height))).toBeLessThanOrEqual(page.viewportSize()!.height);
-      for (const selector of [".signal-list", ".activity-card ol"]) {
+      for (const selector of [".activity-card ol"]) {
         const list = page.locator(selector);
         expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
         await expect(list).toHaveAttribute("tabindex", "0");
       }
+      const signalCarousel = page.getByRole("group", { name: "Recent signals" });
+      await expect(signalCarousel.locator(".signal-item")).toHaveCount(1);
+      const signalCount = await signalCarousel.locator(".signal-carousel-count").textContent();
+      await signalCarousel.getByRole("button", { name: "Next signal" }).click();
+      await expect(signalCarousel.locator(".signal-carousel-count")).not.toHaveText(signalCount!);
       const track = campaigns.locator(".campaign-track");
       expect(await track.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
       for (let i = 1; i < slides.length; i++) await campaigns.getByRole("button", { name: "Next campaign" }).click();
@@ -242,10 +247,12 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
 
     // Expand the advertising evidence: measurements, verification and a source record that resolves independently.
     await page.getByTestId("filter-tool").selectOption("advertising_analysis");
-    await expect(page.getByTestId("evidence-item")).toHaveCount(1);
+    const advertisingCount = api.items.filter((item: {tool: string}) => item.tool === "advertising_analysis").length;
+    expect(advertisingCount).toBeGreaterThan(0);
+    await expect(page.getByTestId("evidence-item")).toHaveCount(advertisingCount);
     await page.getByTestId("evidence-toggle").first().click();
-    await expect(page.getByTestId("evidence-detail")).toContainText("ctr");
-    await expect(page.getByTestId("evidence-verification")).toContainText("source_records_resolve");
+    await expect(page.getByTestId("evidence-detail").first()).toContainText("ctr");
+    await expect(page.getByTestId("evidence-verification").first()).toContainText("source_records_resolve");
     const link = page.getByTestId("source-link").first();
     const href = (await link.getAttribute("href"))!;
     const eventId = new URL(href, "http://localhost").searchParams.get("eventId")!;

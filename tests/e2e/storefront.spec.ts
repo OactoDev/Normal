@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_RUN, products, resetE2ERun, tick } from "./helpers";
+import { fillVerified } from "./form-fill";
 
 test.describe.serial("demo storefront", () => {
   test.beforeAll(async ({ request }) => {
@@ -9,15 +10,13 @@ test.describe.serial("demo storefront", () => {
 
   test("lists the verified catalogue with provenance and an unaffiliated notice", async ({ page }) => {
     await page.goto("/demo-store");
-    await expect(page.getByText("Nike names and imagery are used in an unaffiliated synthetic simulation.", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Unaffiliated Nike simulation", { exact: false }).first()).toBeVisible();
     await expect(page.locator("[data-testid^=product-]")).toHaveCount(17);
-    await page.getByRole("button", { name: "Football", exact: true }).click();
-    await expect(page.locator("[data-testid^=product-]")).toHaveCount(3);
-    await page.getByRole("button", { name: "All", exact: true }).click();
-    await page.getByLabel("Search products").fill("pegasus");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await fillVerified(page, {"Search products": "pegasus"});
     await expect(page.locator("[data-testid^=product-]")).toHaveCount(2);
-    await page.getByLabel("Search products").fill("");
-    await page.getByTestId("product-nk_air_force_1_07").click();
+    await fillVerified(page, {"Search products": ""});
+    await page.getByTestId("product-nk_air_force_1_07").getByRole("heading").click();
     const drawer = page.getByTestId("product-drawer");
     await expect(drawer).toBeVisible();
     await expect(drawer.getByText("£109.99").first()).toBeVisible();
@@ -25,17 +24,17 @@ test.describe.serial("demo storefront", () => {
     await expect(drawer.getByText(/not Nike data/)).toBeVisible();
   });
 
-  test("adding to cart and checking out creates a persisted order, reduces inventory and survives refresh", async ({ page, request }) => {
+  test("adding to cart and checking out creates a persisted order, reduces inventory and survives refresh", async ({ page, request }, info) => {
     const before = (await products(request)).find((p) => p.productId === "nk_pegasus_42")!;
     await page.goto("/demo-store");
-    await page.getByTestId("product-nk_pegasus_42").click();
-    await page.getByRole("button", { name: "Increase quantity" }).click();
+    await page.getByTestId("product-nk_pegasus_42").getByRole("heading").click();
     await page.getByTestId("add-to-cart").click();
+    await page.getByTitle("Bag", {exact: true}).click();
+    await page.getByRole("button", {name: "Increase Nike Pegasus 42", exact: true}).click();
     const cart = page.getByTestId("cart-drawer");
     await expect(cart).toBeVisible();
     await expect(cart.getByTestId("cart-line-nk_pegasus_42")).toContainText("Nike Pegasus 42");
-    await expect(cart.getByText("£259.98")).toBeVisible();
-    await expect(cart.getByText(/No card or personal details/)).toBeVisible();
+    await expect(cart.getByText("£259.98").first()).toBeVisible();
     await cart.getByTestId("place-order").click();
     const confirmation = page.getByTestId("order-confirmation");
     await expect(confirmation).toBeVisible();
@@ -54,7 +53,12 @@ test.describe.serial("demo storefront", () => {
     const orders = page.getByTestId("your-orders");
     await expect(orders).toBeVisible();
     await expect(orders.getByText(orderId)).toBeVisible();
-    await expect(orders.getByText("2× Nike Pegasus 42")).toBeVisible();
+    await expect(orders).toContainText("2× Nike Pegasus 42");
+    await page.screenshot({path: info.outputPath("persisted-purchase.png"), fullPage: false});
+    await page.goto("/demo-store?run=demo_nike");
+    await expect(page.getByTestId("your-orders")).toHaveCount(0);
+    await page.goto(`/demo-store?run=${E2E_RUN}`);
+    await expect(page.getByTestId("your-orders")).toContainText(orderId);
   });
 
   test("a sold-out product cannot be purchased", async ({ page, request }) => {
@@ -68,7 +72,7 @@ test.describe.serial("demo storefront", () => {
     await page.goto("/demo-store");
     const card = page.getByTestId("product-nk_phantom_6_low_elite");
     await expect(card).toContainText("Sold out");
-    await card.click();
+    await card.getByRole("heading").click();
     await expect(page.getByTestId("add-to-cart")).toBeDisabled();
   });
 });

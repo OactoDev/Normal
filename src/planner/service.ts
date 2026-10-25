@@ -97,7 +97,7 @@ export async function processPlanning(db: Db, job: PlanningJob, model: (request:
   try {
     const context = await planningContext(db, jobScope(job));
     if (contextHash(context) !== job.contextHash) throw new PlannerError("Planning input changed before generation. Review the current state.", "stale_state");
-    const request: ModelRequest = { model: process.env.MUBIT_PLANNER_MODEL || providerConfig().diagnosisModel, system: PLANNER_SYSTEM, input: { ...modelContext(context), validationRepair: job.repair ? job.checks.filter((check) => !check.passed).map((check) => ({ strategy: check.strategyKey, errors: check.errors })) : null }, schema: PlanningOutput, schemaName: "solution_strategies", sessionId: job.jobId, maxOutputTokens: 10000 };
+    const request: ModelRequest = { model: providerConfig().plannerModel, system: PLANNER_SYSTEM, input: { ...modelContext(context), validationRepair: job.repair ? job.checks.filter((check) => !check.passed).map((check) => ({ strategy: check.strategyKey, errors: check.errors })) : null }, schema: PlanningOutput, schemaName: "solution_strategies", sessionId: job.jobId, maxOutputTokens: 10000 };
     if (Buffer.byteLength(JSON.stringify(request.input), "utf8") > 160000) throw new PlannerError("Planning context exceeds the bounded input budget; narrow the evidence before generation.", "input_budget");
     const checksum = digest(request.input), fingerprint = promptFingerprint(request, PLANNER_TASK, PLANNER_PROMPT_VERSION);
     const previous = await calls.findOne({ callId });

@@ -1,10 +1,13 @@
 import { existsSync } from "node:fs";
 import { MongoClient } from "mongodb";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 /** Browser fixtures select a storefront run; restore the previous selection even after a failed suite. */
 export default async function preserveActiveDemoRun() {
   if (existsSync(".env.local")) process.loadEnvFile(".env.local");
   if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is required for database-backed browser tests");
+  await promisify(execFile)(process.execPath, ["--conditions=react-server", "--import", "tsx", "tests/e2e/seed.mts"], { timeout: 300_000 });
   const client = await MongoClient.connect(process.env.MONGODB_URI);
   const dbName = process.env.MONGODB_DB || "normal_dev";
   let active: string | undefined;

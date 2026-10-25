@@ -759,7 +759,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
         {showHistory&&detail&&<CampaignHistory name={data.campaigns.find(c=>c.campaignId===campaignId)?.name??campaignId} data={detail.daily} comparison={detail.comparison.find(c=>c.campaignId===campaignId)} />}
 
         {/* Action toolbar (white strip joined to the active tab) */}
-        <div className="h-[44px] px-[7px] bg-white flex items-center justify-between gap-[7px] text-[12px] whitespace-nowrap flex-shrink-0">
+        <div className="h-[44px] px-[7px] bg-white flex items-center justify-between gap-[7px] text-[12px] whitespace-nowrap flex-shrink-0 overflow-x-auto">
           <div className="flex items-center gap-[7px] flex-shrink-0">
             <button
               disabled title="Campaign creation is not supported"
@@ -816,7 +816,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
             </button>
           </div>
 
-          <div className="flex items-center justify-end gap-[7px] min-w-0 overflow-hidden">
+          <div className="flex items-center justify-end gap-[7px] flex-shrink-0">
             {[
               { label: "Columns", icon: Columns3 },
               { label: "Breakdown", icon: AlignLeft },

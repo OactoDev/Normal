@@ -1,11 +1,15 @@
+import { artifactPath } from "./artifacts";
 import { expect, test } from "@playwright/test";
 
-test("Activity shows run-scoped tools and compact filters without the old dashboard blocks", async ({ page }) => {
+test("Activity shows run-scoped tools and compact filters without the old dashboard blocks", async ({ page, request }) => {
   await page.goto("/dashboard/activity?run=demo_nike");
   const stream = page.getByTestId("activity-page");
   await expect(stream.getByText("Activity stream")).toBeVisible();
   await expect(stream.getByText("Advertising Analysis")).toBeVisible();
-  await expect(stream.getByText("22 results · 67 source records", { exact: false })).toBeVisible();
+  const activity = await (await request.get("/api/activity?businessId=nike_demo&simulationRunId=demo_nike")).json();
+  const advertising = activity.items.find((item: {title: string}) => item.title === "Advertising Analysis");
+  expect(advertising).toBeTruthy();
+  await expect(stream.getByText(advertising.detail, { exact: true })).toBeVisible();
   await expect(stream.getByText("Mubit agent call", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Agent execution activity")).toHaveCount(0);
   await expect(page.getByText("Recent events")).toHaveCount(0);
@@ -15,7 +19,7 @@ test("Activity shows run-scoped tools and compact filters without the old dashbo
   expect(otherBusiness.ok()).toBeTruthy();
   expect((await otherBusiness.json()).items).toEqual([]);
   await stream.evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished)); });
-  await page.screenshot({ path: "docs/activity-redesign/default.png" });
+  await page.screenshot({ path: artifactPath("docs/activity-redesign/default.png") });
 
   await stream.getByRole("button", { name: "Agents & tools" }).click();
   await expect(page.locator(".activity-row[data-kind='business']")).toHaveCount(0);
@@ -39,7 +43,7 @@ test("Activity shows persisted Mubit agent calls and links to investigation", as
   await stream.getByRole("button", { name: "Agents & tools" }).click();
   await stream.getByPlaceholder("Search activity").fill("root cause diagnosis");
   await expect(stream.getByText("Mubit agent call · Root cause diagnosis")).toBeVisible();
-  await page.screenshot({ path: "docs/activity-redesign/mubit-filter.png", fullPage: true });
+  await page.screenshot({ path: artifactPath("docs/activity-redesign/mubit-filter.png"), fullPage: true });
   await stream.getByRole("link", { name: "Open Mubit agent call · Root cause diagnosis" }).click();
   await expect(page).toHaveURL(/\/dashboard\/investigations\/inv_stage5_1792885194280_d07498fe5b17/);
 });

@@ -3,6 +3,7 @@ import { campaignBreakdown, type CampaignBreakdownRow } from "@/analytics/metric
 import { COLLECTIONS } from "@/lib/collections";
 import { MAX_ENTITY_IDS, ToolInputBase, type EvidenceDraft, type EvidenceTool, type ToolContext, type WindowT } from "../types";
 import { cap, clampToCutoff, compact, countAndSample, measurement, occurredIn, pc, pctChange, ratio, round, scopeOf } from "./_shared";
+import { campaignTrends } from './campaign-trends';
 
 export const AdvertisingInput = ToolInputBase.extend({
   campaignIds: z.array(z.string().min(1).max(64)).max(MAX_ENTITY_IDS).default([]),
@@ -93,6 +94,31 @@ export const advertisingAnalysis: EvidenceTool<AdvertisingInputT> = {
       detail: { hours: { current: hc, baseline: baseline ? hb : null }, campaigns: cap(rows, input.limit), affected, others, affectedBaseline: affectedBase, observationEventsInWindow: sample.count, attributedSessionEventsInWindow: sessionSample.count },
       warnings, dataOrigin: "simulated",
     };
-    return { evidence: [evidence], resultCount: rows.length, warnings };
+    // Campaign comparisons and chronology must reach the canonical packet, not just UI-only detail.
+    const trend = await campaignTrends(ctx, { startAt: baseline?.startAt ?? window.startAt, endAt: window.endAt });
+    const comparisons: EvidenceDraft[] = rows.filter(r => r.affected).slice(0, MAX_ENTITY_IDS).map(r => {
+      const days = trend.filter(d => d.campaignId === r.campaignId);
+      const selectedDays = days.length <= 8 ? days : [...days.slice(0, 2), ...days.slice(-6)];
+      const peers = rows.filter(p => p.campaignId !== r.campaignId).slice(0, MAX_ENTITY_IDS);
+      const fmt = (n: number | null) => n === null ? 'unavailable' : String(round(n));
+      const observation = [
+        `Simulated campaign ${r.campaignId}: CTR ${fmt(r.ctr)} versus ${fmt(r.baselineCtr)} baseline; average frequency ${fmt(r.averageFrequency)} versus ${fmt(r.baselineAverageFrequency)}; ROAS ${fmt(r.roas)} versus ${fmt(r.baselineRoas)}; CPA in GBP minor units ${fmt(r.costPerAcquisitionMinor)} versus ${fmt(r.baselineCostPerAcquisitionMinor)}; attributed sessions/hour ${r.attributedSessionsPerHour} versus ${fmt(r.baselineAttributedSessionsPerHour)}.`,
+        `Observed daily sequence (UTC; boundary days may mix baseline and incident hours): ${selectedDays.map(d => `${d.day}: ${d.hours} observed hours, CTR ${fmt(d.ctr)}, frequency ${d.averageFrequency}, spend GBP minor ${d.spendMinor}, attributed orders ${d.attributedOrders}`).join('; ')}.`,
+        `Contemporaneous campaign comparisons: ${peers.map(p => `${p.campaignId}: CTR ${fmt(p.ctr)} vs ${fmt(p.baselineCtr)}, frequency ${fmt(p.averageFrequency)} vs ${fmt(p.baselineAverageFrequency)}, ROAS ${fmt(p.roas)} vs ${fmt(p.baselineRoas)}`).join('; ')}. These peers are not assumed unaffected controls.`,
+        'Ratios and trends are computed from canonical campaign/hour observations; no creative-level or audience-level attribution is available, and chronology alone does not establish causation.',
+      ].join(' ');
+      return {
+        key: `advertising:campaign:${r.campaignId}`, category: 'advertising', title: `Campaign comparison and daily chronology: ${r.campaignId}`,
+        observation, window, dataOrigin: 'simulated', warnings,
+        measurements: compact([measurement('ctr', r.ctr, 'ratio', r.baselineCtr),
+          measurement('average_frequency', r.averageFrequency, 'impressions/user', r.baselineAverageFrequency),
+          measurement('roas', r.roas, 'ratio', r.baselineRoas),
+          measurement('cost_per_acquisition_minor', r.costPerAcquisitionMinor, 'GBP minor units', r.baselineCostPerAcquisitionMinor),
+          measurement('attributed_sessions_per_hour', r.attributedSessionsPerHour, 'count/hour', r.baselineAttributedSessionsPerHour)]),
+        sourceRecords: [...selectedDays.flatMap(d => d.sourceRecords), ...sample.sample],
+        detail: { campaigns: [r], daily: selectedDays, hours: { current: hc, baseline: baseline ? hb : null } },
+      };
+    });
+    return { evidence: [evidence, ...comparisons], resultCount: rows.length, warnings };
   },
 };

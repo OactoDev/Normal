@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { Diagnosis } from "@normal/contracts";
 import { getDb, getMongoClient } from "../src/lib/mongodb";
 import { COLLECTIONS } from "../src/lib/collections";
@@ -10,7 +11,8 @@ import { composeReport } from "../src/intelligence/investigator/reports";
 import { Budget, ExternalSource, InvestigationState } from "../src/intelligence/investigator/schemas";
 
 process.loadEnvFile(".env.local");
-const path = "docs/stage5-runs/source-card-integration-fixture.json";
+const output = (file: string) => process.env.E2E_ARTIFACT_DIR ? join(process.env.E2E_ARTIFACT_DIR, "docs/stage5-runs", file) : `docs/stage5-runs/${file}`;
+const path = output("source-card-integration-fixture.json");
 const scope = { businessId: "nike_eval", simulationRunId: "source_acceptance_1792885169199", investigationId: "official_source_check" };
 const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 
@@ -34,7 +36,7 @@ async function main() {
     const fixture = JSON.parse(readFileSync(path, "utf8"));
     assert.deepEqual(preserved, fixture.preserved, "Demo, active selection, advertising scope or original sources changed");
     const result = { passed: true, demoPreserved: true, activeSelection: business?.activeSimulationRunId, sourceRecordsUnchanged: true, advertisingScopeUnchanged: true, checkedAt: new Date().toISOString() };
-    writeFileSync("docs/stage5-runs/source-card-preservation.json", JSON.stringify(result, null, 2));
+    writeFileSync(output("source-card-preservation.json"), JSON.stringify(result, null, 2));
     console.log(JSON.stringify(result)); return;
   }
   const sources = raw.map((doc) => ExternalSource.parse(doc));
@@ -65,7 +67,7 @@ async function main() {
   assert.equal(report.claims.find((claim) => claim.claimId === rejected.claimId)?.support, "insufficient_evidence");
   const fixture = { mode: "read-only Mongo source records + local report fixture; browser read responses intercepted; no persisted AI report created", scope, associations, sources, state, report,
     originalResearchRequestId: "mreq_01a170489d8b7320a4f6e0cce4d9b774", originalAssessmentRequestId: "mreq_01a17048cae175c0b135a31cce2a17a3", newProviderCalls: 0, preserved };
-  mkdirSync("docs/stage5-runs", { recursive: true });
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(fixture, null, 2));
   console.log(JSON.stringify({ scope, associations, sourceIds: sources.map((source) => source.sourceId), fixture: path, newProviderCalls: 0 }));
 }

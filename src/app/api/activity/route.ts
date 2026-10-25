@@ -60,8 +60,8 @@ export async function GET(request: Request): Promise<Response> {
       if (row.task === "system.insufficient_evidence") continue;
       const provider = row.metadata?.provider === "mubit" ? "Mubit" : row.metadata?.provider === "google_direct" ? "Google" : "Model";
       const task = text(row.task).includes("solution_planning") ? "Solution planning" : text(row.task).includes("diagnosis") ? "Root cause diagnosis" : text(row.task).includes("source_support") ? "Source review" : text(row.task) === "external_research" ? "External research" : "Investigation reasoning";
-      const model = text(row.metadata?.model);
-      add(`call:${row.callId}`, row.startedAt, "recorded", "agent", provider, `${provider} agent call · ${task}`, model ? `${model}${number(row.metadata?.latencyMs) ? ` · ${(number(row.metadata.latencyMs) / 1000).toFixed(1)}s` : ""}` : label(row.status), text(row.status), investigationLink(row.investigationId));
+      const duration = number(row.metadata?.latencyMs);
+      add(`call:${row.callId}`, row.startedAt, "recorded", "agent", provider, `${provider} agent call · ${task}`, `${label(row.status)}${duration ? ` · ${(duration / 1000).toFixed(1)}s` : ""}`, text(row.status), investigationLink(row.investigationId));
     }
     for (const row of planning) add(`planning:${row.jobId}`, row.updatedAt, "recorded", "agent", "Planner", "Solution planning status", label(row.stage || row.status), text(row.status), investigationLink(row.investigationId));
     for (const row of approvals) add(`approval:${row.approval?.approvalId}`, row.approval?.reviewedAt, "recorded", "decision", "Approval", `Plan ${label(row.approval?.decision)}`, `${row.approval?.approvedActionIds?.length ?? 0} actions approved`, text(row.approval?.decision), "/dashboard/approvals");

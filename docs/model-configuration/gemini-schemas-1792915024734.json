@@ -1,0 +1,110 @@
+{
+  "observedAt": "2026-10-25T07:57:18.840Z",
+  "models": {
+    "investigator": "gemini-4-argon",
+    "diagnosis": "gemini-4-argon",
+    "planner": "gemini-4-argon",
+    "research": "gemini-4-argon"
+  },
+  "scope": "Synthetic schema probes, not business diagnosis or accuracy evaluation. No live business records changed.",
+  "results": [
+    {
+      "check": "investigation_schema",
+      "passed": true,
+      "metadata": {
+        "provider": "mubit",
+        "model": "gemini-4-argon",
+        "route": "https://api.mubit.ai/gemini/v1beta/openai/chat/completions",
+        "requestId": "mreq_01a172102bbf7300847b4779c052061a",
+        "providerRequestId": null,
+        "latencyMs": 14100,
+        "inputTokens": 1703,
+        "outputTokens": 967,
+        "totalTokens": 2670,
+        "estimatedCostUsd": null
+      },
+      "value": {
+        "hypotheses": [
+          {
+            "cause": "checkout_failure",
+            "explanation": "A technical disruption or regression in the payment or checkout workflow could prevent customers from completing purchases, causing a drop in observed revenue despite normal upstream traffic.",
+            "mechanism": "Broken checkout steps or payment gateway failures block order completion at the final funnel stage.",
+            "support": "insufficient_evidence",
+            "evidenceIds": [],
+            "counterEvidenceIds": [],
+            "expectedObservations": [
+              "Elevated checkout abandonment rates or payment error logs",
+              "Stable add-to-cart volume paired with a sudden decline in completed orders"
+            ],
+            "missingEvidence": [
+              "Checkout funnel conversion metrics",
+              "Payment gateway error rate telemetry",
+              "Revenue breakdown by device or payment method"
+            ],
+            "falsificationTests": [
+              "Check if checkout completion rates and payment error rates remained stable and unchanged across all platforms during the incident window."
+            ],
+            "chronology": "No temporal data or timestamps have been supplied to establish when the revenue change began.",
+            "confounders": [
+              "Tracking pixel or analytics reporting outage misrepresenting actual completed orders",
+              "Simultaneous shifts in traffic quality or promotional expiration"
+            ],
+            "controlComparison": "Compare checkout conversion rates across unaffected payment methods, browsers, or regions against the affected segments."
+          },
+          {
+            "cause": "ad_inefficiency",
+            "explanation": "Changes in advertising targeting, bidding, or platform delivery could reduce qualified incoming traffic or conversion efficiency, altering revenue performance.",
+            "mechanism": "Misallocated ad spend or degraded targeting delivers lower-intent visitors or fewer sessions, reducing total order volume.",
+            "support": "insufficient_evidence",
+            "evidenceIds": [],
+            "counterEvidenceIds": [],
+            "expectedObservations": [
+              "Decline in return on ad spend or click-to-session conversion",
+              "Shift in paid traffic volume or cost per acquisition relative to organic baselines"
+            ],
+            "missingEvidence": [
+              "Campaign-level spend, impression, click, and conversion records",
+              "Organic versus paid traffic and revenue trends"
+            ],
+            "falsificationTests": [
+              "Verify whether paid traffic volume, cost per click, and campaign conversion rates remained steady while organic traffic experienced the same revenue change."
+            ],
+            "chronology": "No campaign schedule or revenue timeline is available to align advertising changes with the observation.",
+            "confounders": [
+              "Attribution window changes or tracking loss on ad platforms",
+              "Seasonal demand shifts affecting all acquisition channels equally"
+            ],
+            "controlComparison": "Compare revenue and conversion trends from organic and direct traffic channels against active paid advertising campaigns."
+          },
+          {
+            "cause": "unknown",
+            "explanation": "With zero observations available, the revenue anomaly may stem from unmeasured operational, catalog, seasonal, or telemetry factors that cannot be distinguished.",
+            "mechanism": "Unobserved business, market, or measurement changes alter recorded revenue.",
+            "support": "insufficient_evidence",
+            "evidenceIds": [],
+            "counterEvidenceIds": [],
+            "expectedObservations": [
+              "Baseline revenue and order telemetry across products, channels, and fulfillment stages"
+            ],
+            "missingEvidence": [
+              "Primary revenue time series, inventory levels, shipping metrics, and customer feedback logs"
+            ],
+            "falsificationTests": [
+              "Provide validated telemetry showing a specific isolated failure mode in checkout, advertising, inventory, or fulfillment that fully accounts for the variance."
+            ],
+            "chronology": "No timeline is present in the supplied context.",
+            "confounders": [
+              "Data pipeline latency or reporting schema changes creating an artificial revenue observation"
+            ],
+            "controlComparison": "Compare current reporting pipeline outputs against raw ledger transactions and historical baseline periods."
+          }
+        ],
+        "decisionSummary": "No evidence, tools, or remaining investigation rounds are available. Recorded three distinct competing hypotheses with falsification criteria and stopped due to insufficient evidence.",
+        "nextTools": [],
+        "research": null,
+        "stop": true,
+        "stopReason": "No supporting observations, diagnostic tools, or investigation rounds are available; cause remains undetermined due to insufficient evidence."
+      }
+    }
+  ]
+}

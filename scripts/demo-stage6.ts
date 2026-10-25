@@ -2,13 +2,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { getDb, getMongoClient } from "../src/lib/mongodb";
 import { COLLECTIONS } from "../src/lib/collections";
 import { canonicalJson } from "../src/intelligence/evidence/provenance";
 import { PLANNER_TASK, importAdvisoryArchive, plannerHandoff, readPlanning, runNextPlanning, selectStrategy } from "../src/planner/service";
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 const scope = { businessId: "nike_demo", simulationRunId: "stage5_1792885194280", investigationId: "inv_stage5_1792885194280_d07498fe5b17" };
-const dir = "docs/stage6-runs";
+const dir = process.env.E2E_ARTIFACT_DIR ? join(process.env.E2E_ARTIFACT_DIR, "docs/stage6-runs") : "docs/stage6-runs";
 async function main() {
   const db = await getDb(); mkdirSync(dir, { recursive: true });
   const preserve = async () => {

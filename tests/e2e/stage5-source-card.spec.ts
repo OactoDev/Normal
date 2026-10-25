@@ -1,3 +1,4 @@
+import { artifactPath } from "./artifacts";
 import { test, expect } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -10,7 +11,7 @@ test("persisted Nike source cards preserve attribution, rejection, links and sco
   test.setTimeout(180_000);
   const runScript = (args: string[] = []) => promisify(execFile)(process.execPath, ["--conditions=react-server", "--import", "tsx", "scripts/prepare-stage5-card-check.ts", ...args], { timeout: 90_000 });
   await runScript();
-  const fixture = JSON.parse(readFileSync("docs/stage5-runs/source-card-integration-fixture.json", "utf8")) as {
+  const fixture = JSON.parse(readFileSync(artifactPath("docs/stage5-runs/source-card-integration-fixture.json"), "utf8")) as {
     mode: string; scope: ScopeT; sources: ExternalSourceT[]; report: ReportT; state: StateT; associations: Record<string, number>;
   };
   const { scope, sources, state, report } = fixture;
@@ -72,7 +73,7 @@ test("persisted Nike source cards preserve attribution, rejection, links and sco
     await expect(negative).toContainText("not independent corroboration");
     await expect(negative.locator(".pill")).toHaveText("insufficient");
     await expect(negative.locator("img")).toHaveCount(0);
-    await page.screenshot({ path: "docs/stage5-runs/source-card-integration-desktop.png", fullPage: true });
+    await page.screenshot({ path: artifactPath("docs/stage5-runs/source-card-integration-desktop.png"), fullPage: true });
 
     await explorer.getByTestId("filter-role").selectOption("support");
     await expect(explorer.getByTestId("external-evidence-card")).toHaveCount(1);
@@ -136,7 +137,7 @@ test("persisted Nike source cards preserve attribution, rejection, links and sco
     ].map(async (path) => (await request.get(path)).status()));
     expect(isolationStatuses).toEqual([404, 404]);
     expect(errors).toEqual([]);
-    writeFileSync("docs/stage5-runs/source-card-integration-browser.json", JSON.stringify({ mode: fixture.mode, scope, associations: fixture.associations,
+    writeFileSync(artifactPath("docs/stage5-runs/source-card-integration-browser.json"), JSON.stringify({ mode: fixture.mode, scope, associations: fixture.associations,
       acceptedSourceId: accepted.sourceId, rejectedSourceId: rejected.sourceId, originalUrl: accepted.originalUrl, originalTitle, originalHttpStatus: documentResponse.status(),
       sourceImageLoaded: true, claimsLinked: true, unsupportedExcludedFromSupport: true, samePageClaimAssessmentsRetained: true, duplicateIdsRemoved: true,
       reportFixtureSurvivedReload: true, businessRunIsolation: isolationStatuses, apiMethods: [...new Set(apiMethods)], newProviderCalls: 0, browserErrors: errors, viewport: info.project.use.viewport,

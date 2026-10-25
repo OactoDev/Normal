@@ -5,9 +5,9 @@ if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 async function main() {
   const c = providerConfig();
   const schema = z.object({ ok: z.boolean() }).strict();
-  const result = await callModel({ model: c.investigatorModel, system: "Return the requested connectivity acknowledgement.", input: "Return ok true.", schema, schemaName: "connectivity", maxOutputTokens: 256 });
+  const result = await callModel({ model: c.investigatorModel, system: "Return the requested connectivity acknowledgement.", input: "Return ok true.", schema, schemaName: "connectivity", maxOutputTokens: 2048, recording: "metadata" });
   console.log(JSON.stringify({ check: "structured_output", value: result.value, ...result.metadata }));
-  const tool = await callModel({ model: c.investigatorModel, system: "Call acknowledge with ok true.", input: "Check tool calling.", tools: [{ name: "acknowledge", description: "Acknowledge connectivity", parameters: jsonSchema(schema) }], forceTool: "acknowledge", maxOutputTokens: 256 });
+  const tool = await callModel({ model: c.investigatorModel, system: "Call acknowledge with ok true.", input: "Check tool calling.", tools: [{ name: "acknowledge", description: "Acknowledge connectivity", parameters: jsonSchema(schema) }], forceTool: "acknowledge", maxOutputTokens: 2048, recording: "metadata" });
   if (tool.toolCalls.length !== 1) throw new Error("Expected one tool call");
   schema.parse(tool.toolCalls[0].arguments);
   console.log(JSON.stringify({ check: "function_call", calls: tool.toolCalls, ...tool.metadata }));

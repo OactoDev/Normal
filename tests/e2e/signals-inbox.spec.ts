@@ -1,3 +1,4 @@
+import { artifactPath } from "./artifacts";
 import { expect, test } from "@playwright/test";
 
 const RUN = "demo_nike";
@@ -26,7 +27,7 @@ test("consolidated incident inbox and accessible detail drawer", async ({ page, 
   await expect(impact.locator(".inbox-impact-fill").last()).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   await expect(page.locator(".inbox-chart-frame")).toHaveCount(0);
   await expect(page.getByRole("searchbox")).toHaveCount(0);
-  await page.screenshot({ path: `${SHOTS}/default-desktop.png`, fullPage: true });
+  await page.screenshot({ path: artifactPath(`${SHOTS}/default-desktop.png`), fullPage: true });
 
   const campaign = impact.getByTestId("signal-impact-row").first();
   await campaign.click();
@@ -34,7 +35,7 @@ test("consolidated incident inbox and accessible detail drawer", async ({ page, 
   await expect(page.getByTestId("signal-drawer")).toContainText("Pegasus 42");
   await expect(page.getByTestId("signal-drawer").locator(".inbox-chart svg")).toBeVisible();
   await expect(page.getByTestId("signal-drawer")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
-  await page.screenshot({ path: `${SHOTS}/campaign-drawer-desktop.png` });
+  await page.screenshot({ path: artifactPath(`${SHOTS}/campaign-drawer-desktop.png`) });
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("signal-drawer")).toHaveCount(0);
   await expect(campaign).toBeFocused();
@@ -47,7 +48,7 @@ test("consolidated incident inbox and accessible detail drawer", async ({ page, 
   await expect(drawer).toHaveCSS("transition-duration", "0.25s");
   await expect(drawer).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   const overlayBox = await page.getByTestId("signal-drawer-overlay").boundingBox();
-  expect(overlayBox).toMatchObject({ x: 0, y: 0, width: 1440, height: 900 });
+  expect(overlayBox).toMatchObject({ x: 0, y: 0, ...page.viewportSize()! });
   await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
   await expect(page.getByRole("button", { name: "Close details" })).toBeFocused();
   await expect(drawer).toContainText("-82.4%");
@@ -66,9 +67,9 @@ test("consolidated incident inbox and accessible detail drawer", async ({ page, 
   expect(await scroll.evaluate((element) => element.scrollHeight)).toBeGreaterThan(await scroll.evaluate((element) => element.clientHeight));
   await expect(drawer.getByRole("link", { name: "Open full investigation" })).toHaveAttribute("href", new RegExp(`/dashboard/investigations/${advertising.investigationId}\\?run=${RUN}$`));
   await drawer.getByRole("heading", { name: "Evidence" }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: `${SHOTS}/drawer-evidence-desktop.png` });
+  await page.screenshot({ path: artifactPath(`${SHOTS}/drawer-evidence-desktop.png`) });
   await drawer.locator(".inbox-drawer-scroll").evaluate((element) => { element.scrollTop = 0; });
-  await page.screenshot({ path: `${SHOTS}/drawer-desktop.png` });
+  await page.screenshot({ path: artifactPath(`${SHOTS}/drawer-desktop.png`) });
 
   await drawer.getByRole("link", { name: "Open full investigation" }).focus();
   await page.keyboard.press("Tab");

@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../evidence/provenance";
 import { z } from "zod";
+import { configuredModels } from "../model-settings";
 
 export interface CallMetadata {
   provider: "mubit" | "google_direct"; route: string; model: string; requestId: string | null;
@@ -23,9 +24,8 @@ export function providerConfig() {
   if (!process.env.MUBIT_API_KEY) throw new ProviderError("missing_mubit_key", false, false);
   return {
     key: process.env.MUBIT_API_KEY, base: base.replace(/\/$/, ""), geminiBase: geminiBase.replace(/\/$/, ""),
-    investigatorModel: process.env.MUBIT_INVESTIGATOR_MODEL || "gpt-6-luna",
-    diagnosisModel: process.env.MUBIT_DIAGNOSIS_MODEL || "gpt-6-luna",
-    researchModel: process.env.MUBIT_RESEARCH_MODEL || "gemini-4-argon",
+    geminiTransport: z.enum(["native", "openai"]).parse(process.env.MUBIT_GEMINI_TRANSPORT || "native"),
+    ...configuredModels(),
     reasoning: z.enum(["low", "medium", "high"]).parse(process.env.MUBIT_REASONING_DEPTH || "low"),
   };
 }
@@ -54,6 +54,8 @@ export interface FunctionTool { name: string; description: string; parameters: R
 export interface ModelRequest {
   model: string; system: string; input: unknown; schema?: z.ZodTypeAny; schemaName?: string;
   tools?: FunctionTool[]; forceTool?: string; maxOutputTokens?: number; sessionId?: string;
+  /** Held-out evaluation must use metadata: Mubit then cannot keep the request/answer for training. */
+  recording?: "full" | "metadata" | "off";
 }
 /** Stable task identity, independent of changing evidence, sessions, and model routing. */
 export function promptFingerprint(request: ModelRequest, task: string, version: string): string {
@@ -64,7 +66,7 @@ export function promptFingerprint(request: ModelRequest, task: string, version: 
 export interface ModelResponse { value: unknown; toolCalls: Array<{ id: string; name: string; arguments: unknown }>; metadata: CallMetadata }
 const finite = (x: unknown) => typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : null;
 
-export async function gatewayRequest(route: string, body: unknown, provider: CallMetadata["provider"], model: string, timeoutMs = 60_000): Promise<{ body: Record<string, unknown>; metadata: CallMetadata }> {
+export async function gatewayRequest(route: string, body: unknown, provider: CallMetadata["provider"], model: string, timeoutMs = 60_000, recording?: ModelRequest["recording"]): Promise<{ body: Record<string, unknown>; metadata: CallMetadata }> {
   const config = providerConfig();
   const direct = provider === "google_direct";
   if (direct && (process.env.NORMAL_DIRECT_GEMINI_FALLBACK !== "true" || !process.env.GEMINI_API_KEY)) throw new ProviderError("direct_fallback_disabled", false, false);
@@ -74,7 +76,7 @@ export async function gatewayRequest(route: string, body: unknown, provider: Cal
   let response: Response;
   try {
     response = await fetch(route, { method: "POST", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
-      headers: { "content-type": "application/json", ...(native ? { "x-goog-api-key": key } : { authorization: `Bearer ${key}` }) }, body: JSON.stringify(body) });
+      headers: { "content-type": "application/json", ...(native ? { "x-goog-api-key": key } : { authorization: `Bearer ${key}` }), ...(!direct && recording ? { "x-middleware-record": recording } : {}) }, body: JSON.stringify(body) });
   } catch { throw new ProviderError("transport_or_timeout", false, true, { provider, model, route, latencyMs: Date.now() - started }); }
   const metadata: CallMetadata = { provider, model, route, requestId: response.headers.get("x-middleware-request-id"), providerRequestId: response.headers.get("x-request-id") || response.headers.get("request-id"), latencyMs: Date.now() - started, inputTokens: null, outputTokens: null, totalTokens: null, estimatedCostUsd: null };
   if (!response.ok) {
@@ -96,28 +98,87 @@ export async function gatewayRequest(route: string, body: unknown, provider: Cal
   metadata.totalTokens = finite(usage.total_tokens ?? usage.totalTokenCount);
   const inputRate = finite(Number(process.env.NORMAL_INPUT_USD_PER_MILLION ?? NaN));
   const outputRate = finite(Number(process.env.NORMAL_OUTPUT_USD_PER_MILLION ?? NaN));
-  if (!native && inputRate !== null && outputRate !== null && metadata.inputTokens !== null && metadata.outputTokens !== null) metadata.estimatedCostUsd = (metadata.inputTokens * inputRate + metadata.outputTokens * outputRate) / 1e6;
+  if (!model.startsWith("gemini-") && !native && inputRate !== null && outputRate !== null && metadata.inputTokens !== null && metadata.outputTokens !== null) metadata.estimatedCostUsd = (metadata.inputTokens * inputRate + metadata.outputTokens * outputRate) / 1e6;
   return { body: data, metadata };
 }
 
 export async function callModel(req: ModelRequest): Promise<ModelResponse> {
   const config = providerConfig();
-  const { body, metadata } = await gatewayRequest(`${config.base}/chat/completions`, {
+  const gemini = req.model.startsWith("gemini-");
+  if (gemini && config.geminiTransport === "native") return callGeminiModel(req);
+  const { body, metadata } = await gatewayRequest(`${gemini ? `${config.geminiBase}/v1beta/openai` : config.base}/chat/completions`, {
     model: req.model, messages: [{ role: "system", content: req.system }, ...(req.sessionId ? [{ role: "user", content: `Investigation session: ${req.sessionId}` }] : []), { role: "user", content: JSON.stringify(req.input) }],
-    max_completion_tokens: req.maxOutputTokens ?? 6000, reasoning_effort: req.tools?.length ? "none" : config.reasoning,
-    ...(req.schema ? { response_format: { type: "json_schema", json_schema: { name: req.schemaName || "normal_output", strict: true, schema: jsonSchema(req.schema) } } } : {}),
+    ...(gemini ? { max_tokens: req.maxOutputTokens ?? 6000 } : { max_completion_tokens: req.maxOutputTokens ?? 6000 }),
+    reasoning_effort: !gemini && req.tools?.length ? "none" : config.reasoning,
+    ...(req.schema ? { response_format: { type: "json_schema", json_schema: { name: req.schemaName || "normal_output", strict: true, schema: gemini ? geminiGenerationSchema(req.schema) : jsonSchema(req.schema) } } } : {}),
     ...(req.tools?.length ? { tools: req.tools.map((t) => ({ type: "function", function: { ...t, strict: true } })), tool_choice: req.forceTool ? { type: "function", function: { name: req.forceTool } } : "auto", parallel_tool_calls: false } : {}),
-  }, "mubit", req.model);
+  }, "mubit", req.model, 60_000, req.recording);
   const choices = body.choices as Array<{ finish_reason: string; message: { content?: string; refusal?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }> | undefined;
   const choice = choices?.[0];
   if (!choice || choice.message.refusal || !["stop", "tool_calls"].includes(choice.finish_reason)) throw new ProviderError("incomplete_or_refused", false, false, metadata);
   try {
     const toolCalls = (choice.message.tool_calls || []).map((c) => {
       const tool = req.tools?.find((t) => t.name === c.function.name);
-      if (!tool) throw new Error("Unknown function");
-      return { id: c.id, name: c.function.name, arguments: JSON.parse(c.function.arguments) as unknown };
+      if (!tool || (req.forceTool && c.function.name !== req.forceTool)) throw new Error("Unknown or unexpected function");
+      const args = JSON.parse(c.function.arguments) as unknown;
+      if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("Invalid function arguments");
+      return { id: c.id, name: c.function.name, arguments: args };
     });
     const value = choice.message.content ? (req.schema ? JSON.parse(choice.message.content) as unknown : choice.message.content) : null;
+    if (req.forceTool && !toolCalls.length) throw new Error("Missing forced function call");
+    if (!choice.message.content && !toolCalls.length) throw new Error("Empty response");
     return { value: req.schema ? req.schema.parse(value) : value, toolCalls, metadata };
   } catch (e) { throw new ProviderError("invalid_structured_output", false, false, metadata, 0, e instanceof z.ZodError ? e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).slice(0, 6).join("; ") : "Invalid JSON or tool name"); }
+}
+
+/** Avoid oversized Gemini decoding grammars. Exact string/array limits remain enforced by local Zod. */
+function geminiGenerationSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+  const simplify = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(simplify);
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !["minLength", "maxLength", "minItems", "maxItems"].includes(key))
+      .map(([key, child]) => [key, key === "properties" && child && typeof child === "object"
+        ? Object.fromEntries(Object.entries(child).map(([name, property]) => [name, simplify(property)]))
+        : simplify(child)]));
+    return value;
+  };
+  return simplify(jsonSchema(schema)) as Record<string, unknown>;
+}
+
+/** Native Gemini through Mubit; the OpenAI gateway does not turn a Gemini model ID into a Gemini call. */
+async function callGeminiModel(req: ModelRequest): Promise<ModelResponse> {
+  const config = providerConfig();
+  const { body, metadata } = await gatewayRequest(`${config.geminiBase}/v1beta/models/${encodeURIComponent(req.model)}:generateContent`, {
+    systemInstruction: { parts: [{ text: req.system }] },
+    contents: [{ role: "user", parts: [
+      ...(req.sessionId ? [{ text: `Investigation session: ${req.sessionId}` }] : []),
+      { text: JSON.stringify(req.input) },
+    ] }],
+    generationConfig: { maxOutputTokens: req.maxOutputTokens ?? 6000, thinkingConfig: { thinkingLevel: config.reasoning },
+      ...(req.schema ? { responseMimeType: "application/json", responseJsonSchema: geminiGenerationSchema(req.schema) } : {}) },
+    ...(req.tools?.length ? { tools: [{ functionDeclarations: req.tools.map((tool) => ({ name: tool.name, description: tool.description, parametersJsonSchema: tool.parameters })) }],
+      toolConfig: { functionCallingConfig: req.forceTool ? { mode: "ANY", allowedFunctionNames: [req.forceTool] } : { mode: "AUTO" } } } : {}),
+  }, "mubit", req.model, 60_000, req.recording);
+  const candidates = body.candidates as Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string; thought?: boolean; functionCall?: { id?: string; name: string; args?: unknown } }> } }> | undefined;
+  const candidate = candidates?.[0];
+  if (!candidate || candidate.finishReason !== "STOP" || (body.promptFeedback as { blockReason?: string } | undefined)?.blockReason) throw new ProviderError("incomplete_or_refused", false, false, metadata);
+  try {
+    const parts = candidate.content?.parts || [];
+    const toolCalls = parts.flatMap((part, index) => {
+      if (!part.functionCall) return [];
+      const call = part.functionCall;
+      if (!req.tools?.some((tool) => tool.name === call.name) || (req.forceTool && call.name !== req.forceTool)
+        || !call.args || typeof call.args !== "object" || Array.isArray(call.args)) throw new Error("Invalid function call");
+      return [{ id: call.id || `gemini_function_${index}`, name: call.name, arguments: call.args }];
+    });
+    // Thought text is not an answer and must not leak into a report or JSON parser.
+    const content = parts.filter((part) => !part.thought && typeof part.text === "string").map((part) => part.text).join("");
+    if (req.forceTool && !toolCalls.length) throw new Error("Missing forced function call");
+    const value = content ? (req.schema ? JSON.parse(content) as unknown : content) : null;
+    if (!content && !toolCalls.length) throw new Error("Empty response");
+    return { value: req.schema ? req.schema.parse(value) : value, toolCalls, metadata };
+  } catch (error) {
+    throw new ProviderError("invalid_structured_output", false, false, metadata, 0,
+      error instanceof z.ZodError ? error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).slice(0, 6).join("; ") : "Invalid Gemini JSON or function call");
+  }
 }

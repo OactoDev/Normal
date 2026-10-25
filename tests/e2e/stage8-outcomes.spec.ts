@@ -1,5 +1,9 @@
+import { artifactPath } from "./artifacts";
 import {expect,test} from '@playwright/test';
 import {readFileSync,writeFileSync} from 'node:fs';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+test.beforeEach(async()=>{await promisify(execFile)(process.execPath,['--conditions=react-server','--import','tsx','tests/e2e/seed.mts','--outcomes'],{timeout:90000});});
 test.use({extraHTTPHeaders:process.env.E2E_DEMO_KEY?{'x-normal-demo-key':process.env.E2E_DEMO_KEY}:{}});
 const advertising=JSON.parse(readFileSync('docs/stage7-runs/acceptance.json','utf8'));
 const shipping=JSON.parse(readFileSync('docs/stage7-runs/shipping-fixture.json','utf8'));
@@ -20,7 +24,7 @@ test('Stage 8 shows persisted execution, operational verification and honest pen
  await expect(page.locator('.outcome-metric-explorer button').first()).toContainText('£122.31 → —');
  await page.locator('summary').filter({hasText:'Execution receipt'}).click();
  await expect(page.locator('.outcome-disclosures pre')).toContainText('"toolName": "ads.set_daily_budget"');
- await page.screenshot({path:'docs/stage8-runs/outcomes-advertising.png',fullPage:true});
+ await page.screenshot({path:artifactPath('docs/stage8-runs/outcomes-advertising.png'),fullPage:true});
  await page.getByRole('button',{name:'Recheck assessment'}).click();
  await expect(page.getByTestId('outcome-detail')).toContainText('full post-action window is needed');
  const repeated=await (await request.get(`/api/outcomes?businessId=nike_demo&simulationRunId=${advertising.simulationRunId}`)).json();
@@ -32,7 +36,7 @@ test('Stage 8 shows persisted execution, operational verification and honest pen
  await page.goto(`/dashboard/investigations/${advertising.investigationId}?run=${advertising.simulationRunId}`);
  await page.getByTestId('open-outcome-details').click();
  await expect(page.getByTestId('outcome-detail')).toContainText('Reduce basketball search daily budget');
- await page.screenshot({path:'docs/stage8-runs/outcomes-investigation.png',fullPage:true});
+ await page.screenshot({path:artifactPath('docs/stage8-runs/outcomes-investigation.png'),fullPage:true});
 
  await page.goto(`/dashboard/outcomes?run=${shipping.simulationRunId}`);
  await expect(page.getByTestId('outcomes-page')).toBeVisible();
@@ -43,7 +47,7 @@ test('Stage 8 shows persisted execution, operational verification and honest pen
  await expect(page.getByTestId('outcome-detail')).toContainText('2 intended → 2 reached');
  await expect(page.getByTestId('outcome-detail')).toContainText('business impact is unmeasured');
  await expect(page).toHaveURL(/action=/);
- await page.screenshot({path:'docs/stage8-runs/outcomes-shipping.png',fullPage:true});
+ await page.screenshot({path:artifactPath('docs/stage8-runs/outcomes-shipping.png'),fullPage:true});
  await page.reload();await expect(page.getByTestId('outcomes-page')).toBeVisible();
  await page.goto(`/dashboard/outcomes?run=${controlled.simulationRunId}`);
  await expect(page.getByTestId('outcomes-page')).toBeVisible();
@@ -55,10 +59,10 @@ test('Stage 8 shows persisted execution, operational verification and honest pen
  await expect(page.getByTestId('outcome-detail')).toContainText('0.60%');
  await expect(page.getByTestId('outcome-detail')).toContainText('0.49%');
  await expect(page.getByTestId('outcome-detail')).toContainText('Not met');
- await page.screenshot({path:'docs/stage8-runs/outcomes-controlled.png',fullPage:true});
+ await page.screenshot({path:artifactPath('docs/stage8-runs/outcomes-controlled.png'),fullPage:true});
  await page.reload();await expect(page.getByTestId('outcome-detail')).toContainText('£91.92');
  expect(errors).toEqual([]);
- writeFileSync('docs/stage8-runs/browser.json',JSON.stringify({advertisingRun:advertising.simulationRunId,advertisingAssessmentId:saved.assessmentId,
+ writeFileSync(artifactPath('docs/stage8-runs/browser.json'),JSON.stringify({advertisingRun:advertising.simulationRunId,advertisingAssessmentId:saved.assessmentId,
   advertisingStatus:saved.status,advertisingBeforeMinutes:saved.before.coveredMinutes,advertisingAfterMinutes:saved.after.coveredMinutes,
   shippingRun:shipping.simulationRunId,shippingActions:ship.rows.map((r:{action:{actionType:string};latest:{status:string;businessEffect:string}})=>({type:r.action.actionType,status:r.latest.status,effect:r.latest.businessEffect})),
   controlledRun:controlled.simulationRunId,controlledStatus:compared.rows[0].latest.status,

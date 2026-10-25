@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_RUN, resetE2ERun } from "./helpers";
+import { fillVerified } from "./form-fill";
 
 test.describe.serial("business control room", () => {
   test.beforeAll(async ({ request }) => { await resetE2ERun(request, 42); });
@@ -7,8 +8,7 @@ test.describe.serial("business control room", () => {
   test("starts from a seed, advances time, renders database-backed metrics and charts", async ({ page, request }) => {
     await page.goto("/dev/simulator");
     await expect(page.getByText("Nike names and imagery are used in an unaffiliated synthetic simulation.", { exact: false }).first()).toBeVisible();
-    await page.getByTestId("seed-input").fill("42");
-    await page.getByTestId("runid-input").fill(E2E_RUN);
+    await fillVerified(page, { "Seed": "42", "Run id (optional)": E2E_RUN });
     await page.getByTestId("start-run").click();
     await expect(page.getByTestId("notice")).toContainText(`Run ${E2E_RUN} created`);
     await expect(page.getByTestId("virtual-time")).toContainText("01 Oct 00:00");
@@ -33,8 +33,7 @@ test.describe.serial("business control room", () => {
     await page.goto("/dev/simulator");
     await page.locator("select").first().selectOption(E2E_RUN);
     await expect(page.getByTestId("scenario-pill")).toContainText("Healthy baseline");
-    await page.getByTestId("scenario-select").selectOption("ad_fatigue");
-    await page.getByTestId("severity-range").fill("0.8");
+    await fillVerified(page, { "Scenario": "Ad fatigue", "Severity": "0.8" });
     await page.getByTestId("inject").click();
     await expect(page.getByTestId("notice")).toContainText("Ad fatigue active at severity 0.80");
     await expect(page.getByTestId("scenario-pill")).toContainText("Ad fatigue · 0.80");

@@ -3,6 +3,8 @@ import {COLLECTIONS,ensureIndexes} from '@/lib/collections';
 import {InvestigationState} from '@/intelligence/investigator/schemas';
 import {composeReport} from '@/intelligence/investigator/reports';
 import {startPlanning,runNextPlanning,selectStrategy,submitPlan} from '@/planner/service';
+import {createInitialWorld} from '@/simulator/bootstrap';
+import {NIKE_REFERENCE_CATALOGUE} from '@/reference/nike-catalogue';
 import {contextFixture,strategyFixture} from '../planner/fixtures';
 export async function seedExecutionFixture(db:Db,simulationRunId:string,shipping=false,businessId='nike_test') {
  await ensureIndexes(db);
@@ -14,8 +16,11 @@ export async function seedExecutionFixture(db:Db,simulationRunId:string,shipping
  const state=InvestigationState.parse({schemaVersion:1,...scope,jobId:`${simulationRunId}_job`,status:'completed',stage:'completed',createdAt:fixture.cutoff,updatedAt:fixture.cutoff,startedAt:fixture.cutoff,completedAt:fixture.cutoff,round:1,toolCount:1,researchCount:0,sourceCount:0,callCount:0,reservedTokens:0,actualTokens:0,estimatedCostUsd:0,budget:{maxRounds:1,maxTools:1,maxResearchRounds:0,maxSources:0,maxCalls:2,maxTokens:5000,maxWallMs:60000,maxCostUsd:null},cutoff:fixture.cutoff,incidentWindow:evidence.window,baselineWindow:null,evidenceIds:[evidence.evidenceId],sourceIds:[],hypotheses:[],steps:[],error:null,stopReason:null,reportId:`report_${simulationRunId}_job`,attempts:1});
  const report=composeReport(state,diagnosis,[evidence],[],['campaign_A']);
  const runScope={businessId,simulationRunId};
- const sourceState=await db.collection(COLLECTIONS.simulatorState).findOne({businessId:'nike_demo',simulationRunId:'stage5_1792885194280'},{projection:{_id:0}});
- await db.collection(COLLECTIONS.simulatorState).insertOne({...sourceState,...runScope,status:'paused',lock:null,virtualTime:fixture.storefront.virtualTime,updatedAt:fixture.storefront.updatedAt});
+ // Build a complete run locally so tests do not depend on saved demo records.
+ const virtualStartAt=new Date(Date.parse(fixture.storefront.virtualTime)-24*60*60*1000).toISOString();
+ const {world}=createInitialWorld({...runScope,seed:42,catalogue:NIKE_REFERENCE_CATALOGUE,config:{initialCustomers:0},virtualStartAt,createdAt:fixture.storefront.updatedAt});
+ await db.collection(COLLECTIONS.simulatorState).insertOne({...world.state,status:'paused',virtualTime:fixture.storefront.virtualTime});
+ await db.collection(COLLECTIONS.simulatedProducts).insertMany([...world.products.values()]);
  await db.collection(COLLECTIONS.simulatedCampaigns).insertOne({...fixture.campaigns[0],...runScope});
  await db.collection(COLLECTIONS.simulatedStorefront).insertOne({...runScope,banners:[],promotions:[],updatedAt:fixture.storefront.updatedAt});
  await db.collection(COLLECTIONS.investigations).insertOne({...scope,status:'awaiting_review'});

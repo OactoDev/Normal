@@ -69,8 +69,9 @@ describe('partner approval + Normal execution',()=>{
   const response=await approveRoute(new Request('http://localhost/api/plans/x/approve',{method:'POST',body:'{}'}),{params:Promise.resolve({id:'x'})});expect(response.status).toBe(404);
  });
  it('serves scoped storefront products and does not fall back for a foreign run',async()=>{
-  const response=await productGet(new Request('http://localhost/api/demo-store/products?businessId=foreign&simulationRunId=demo_nike'));expect(response.status).toBeGreaterThanOrEqual(400);
-  const good=await productGet(new Request('http://localhost/api/demo-store/products?businessId=nike_demo&simulationRunId=demo_nike'));expect(good.status).toBe(200);const body=await good.json();expect(body.products).toHaveLength(17);expect(new Set(body.products.map((p:{productId:string})=>p.productId)).size).toBe(17);expect(body.products.every((p:{images:unknown[]})=>p.images.length>0)).toBe(true);
+  const scope=await seed();
+  const response=await productGet(new Request(`http://localhost/api/demo-store/products?businessId=foreign&simulationRunId=${scope.simulationRunId}`));expect(response.status).toBeGreaterThanOrEqual(400);
+  const good=await productGet(new Request(`http://localhost/api/demo-store/products?businessId=${scope.businessId}&simulationRunId=${scope.simulationRunId}`));expect(good.status).toBe(200);const body=await good.json();expect(body.products).toHaveLength(17);expect(new Set(body.products.map((p:{productId:string})=>p.productId)).size).toBe(17);expect(body.products.every((p:{images:unknown[]})=>p.images.length>0)).toBe(true);
  });
 
  it('exposes deduplicated campaign metrics, history, budget and strict run isolation through the existing API',async()=>{

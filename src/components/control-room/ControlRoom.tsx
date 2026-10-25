@@ -182,8 +182,8 @@ export function ControlRoom() {
                 </select>
               </label>
               <div className="row">
-                <label className="field" style={{ flex: 1 }}>Seed<input className="input" value={seed} onChange={(e) => setSeed(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" data-testid="seed-input" /></label>
-                <label className="field" style={{ flex: 2 }}>Run id (optional)<input className="input" value={newRunId} onChange={(e) => setNewRunId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="run_nike_s42" data-testid="runid-input" /></label>
+                <label className="field" style={{ flex: 1 }}>Seed<input aria-label="Seed" className="input" value={seed} onChange={(e) => setSeed(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" data-testid="seed-input" /></label>
+                <label className="field" style={{ flex: 2 }}>Run id (optional)<input aria-label="Run id (optional)" className="input" value={newRunId} onChange={(e) => setNewRunId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="run_nike_s42" data-testid="runid-input" /></label>
               </div>
               <button className="btn primary" onClick={start} disabled={busy !== null || unavailable} data-testid="start-run">{busy === "start" ? <><span className="spinner" /> Creating…</> : "Start / reset run"}</button>
               <span className="muted small">Resetting wipes only the records of this run and makes it the active run for the storefront.</span>
@@ -202,12 +202,12 @@ export function ControlRoom() {
             <div className="group">
               <h4>Inject incident</h4>
               <label className="field">Scenario
-                <select className="select" value={scenario} onChange={(e) => setScenario(e.target.value as (typeof SCENARIOS)[number])} data-testid="scenario-select">
+                <select aria-label="Scenario" className="select" value={scenario} onChange={(e) => setScenario(e.target.value as (typeof SCENARIOS)[number])} data-testid="scenario-select">
                   {SCENARIOS.map((s) => <option key={s} value={s}>{SCENARIO_LABEL[s]}</option>)}
                 </select>
               </label>
               <label className="field">Severity · {severity.toFixed(2)}
-                <input type="range" min={0} max={1} step={0.05} value={severity} onChange={(e) => setSeverity(Number(e.target.value))} className="range" data-testid="severity-range" />
+                <input aria-label="Severity" type="range" min={0} max={1} step={0.05} value={severity} onChange={(e) => setSeverity(Number(e.target.value))} className="range" data-testid="severity-range" />
               </label>
               <button className="btn accent" onClick={inject} disabled={!runId || busy !== null || unavailable} data-testid="inject">{busy === "inject" ? <><span className="spinner" /> Injecting…</> : "Inject scenario"}</button>
               <span className="muted small">Scenarios change hidden mechanics (hazards, probabilities), never the displayed numbers.</span>

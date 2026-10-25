@@ -1,13 +1,13 @@
+import { artifactPath } from "./artifacts";
 import { test, expect } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-// Opt-in: this test makes real billable calls. Prepare with demo-stage5 --prepare.
-const run = process.env.STAGE5_LIVE_RUN;
-const investigation = process.env.STAGE5_LIVE_INV;
-test("real detected incident streams evidence and retains its verified report", async ({ page, request }, info) => {
-  test.skip(!run || !investigation, "Set STAGE5_LIVE_RUN and STAGE5_LIVE_INV to an isolated prepared incident");
+// Replay a recorded report by default. Explicit prepared scopes may opt into a live provider run.
+const run = process.env.STAGE5_LIVE_RUN ?? "stage5_1792885194280";
+const investigation = process.env.STAGE5_LIVE_INV ?? "inv_stage5_1792885194280_d07498fe5b17";
+test("detected incident retains its verified report and evidence", async ({ page, request }, info) => {
   test.setTimeout(720_000);
   const endpoint = `/api/investigations/${investigation}/ai?simulationRunId=${run}`;
   const snapshots: Array<{ status: string; stage: string; evidence: number; tools: number }> = [];
@@ -21,6 +21,7 @@ test("real detected incident streams evidence and retains its verified report", 
   await expect(page.getByTestId("incident-overview")).toHaveAttribute("data-investigation-id", investigation!);
   await page.getByTestId("open-signal-details").click();
   const initial = await (await request.get(endpoint)).json();
+  if (process.env.E2E_LIVE_MODELS !== "1") expect(initial.report, "Recorded report fixture must exist; live provider work is opt-in").toBeTruthy();
   if (!initial.report) {
     await page.getByTestId("start-ai").click();
     await expect(page.getByTestId("ai-status")).toHaveText("queued");
@@ -70,10 +71,13 @@ test("real detected incident streams evidence and retains its verified report", 
   await expect(page.getByTestId("hypothesis-comparison").locator("details").first()).toHaveAttribute("open", "");
   const firstCitation = page.getByTestId("executive-brief").locator("a.investigation-citation").first();
   if (await firstCitation.count()) {
+    const citationTarget = decodeURIComponent((await firstCitation.getAttribute("href"))!.slice(1));
     await firstCitation.click();
-    await expect(page.locator(":target")).toHaveAttribute("data-testid", "evidence-item");
-    await page.locator(":target").getByTestId("evidence-toggle").click();
-    await expect(page.locator(":target").getByTestId("evidence-detail")).toBeVisible();
+    const target = page.locator(`[id="${citationTarget}"]`);
+    await expect(target).toHaveAttribute("data-testid", "evidence-item");
+    await expect(target).toBeVisible();
+    await target.getByTestId("evidence-toggle").click();
+    await expect(target.getByTestId("evidence-detail")).toBeVisible();
   }
   await page.getByRole("dialog").getByRole("button", { name: "Signal", exact: true }).click();
   await page.getByTestId("ai-timeline").locator("summary").first().click();
@@ -85,12 +89,12 @@ test("real detected incident streams evidence and retains its verified report", 
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   mkdirSync("docs/stage5-runs", { recursive: true });
-  await page.screenshot({ path: `docs/stage5-runs/${run}_${info.project.name}.png`, fullPage: true });
+  await page.screenshot({ path: artifactPath(`docs/stage5-runs/${run}_${info.project.name}.png`), fullPage: true });
   await page.reload();
   await page.getByTestId("open-signal-details").click();
   await expect(page.getByTestId("executive-brief")).toContainText(result.report.diagnosis.summary);
   const refreshed = await (await request.get(endpoint)).json();
   expect(refreshed.report).toEqual(result.report);
   expect(refreshed.calls.length).toBe(result.calls.length);
-  writeFileSync(`docs/stage5-runs/${run}_${info.project.name}_browser.json`, JSON.stringify({ investigation, run, snapshots, reportId: result.report.reportId, requestIds: result.calls.map((c: { metadata?: { requestId?: string } }) => c.metadata?.requestId).filter(Boolean), citationsResolved: cited.length, persistedAcrossReload: true, viewport: info.project.use.viewport }, null, 2));
+  writeFileSync(artifactPath(`docs/stage5-runs/${run}_${info.project.name}_browser.json`), JSON.stringify({ investigation, run, snapshots, reportId: result.report.reportId, requestIds: result.calls.map((c: { metadata?: { requestId?: string } }) => c.metadata?.requestId).filter(Boolean), citationsResolved: cited.length, persistedAcrossReload: true, viewport: info.project.use.viewport }, null, 2));
 });

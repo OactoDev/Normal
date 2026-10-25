@@ -181,7 +181,8 @@ describe("autonomous evidence retrieval (Stage 4)", () => {
   it("calculated values reconcile with the canonical records they cite", async () => {
     const details = await db.collection(COLLECTIONS.evidenceDetails).find({ ...scope, investigationId }, { projection: { _id: 0 } }).toArray();
     const evidence = new Map((await db.collection(COLLECTIONS.evidence).find({ ...scope, investigationId }, { projection: { _id: 0 } }).toArray()).map((d) => [d.evidenceId as string, d]));
-    const revenue = details.find((d) => d.tool === "revenue_analysis")!, ads = details.find((d) => d.tool === "advertising_analysis")!;
+    const revenue = details.find((d) => d.tool === "revenue_analysis")!;
+    const ads = details.find((d) => d.tool === "advertising_analysis" && d.detail?.affected)!;
     const w = evidence.get(revenue.evidenceId)!.window as { startAt: string; endAt: string };
     const orders = await db.collection(COLLECTIONS.businessEvents).find({ ...scope, type: "order.completed", occurredAt: { $gte: w.startAt, $lt: w.endAt } }).toArray();
     const measure = (id: string, metric: string) => (evidence.get(id)!.measurements as Array<{ metric: string; value: number }>).find((m) => m.metric === metric)!.value;

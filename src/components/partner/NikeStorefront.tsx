@@ -1,7 +1,7 @@
 "use client";
 
 import { useRun } from "@/components/normal/run-context";
-import type { StoreCatalogue } from "@/components/store/types";
+import type { StoreCatalogue, StoreOrder } from "@/components/store/types";
 import {
 Check,
 ChevronDown,
@@ -51,6 +51,7 @@ interface ShoeProduct {
   isAnomalyRelated?: boolean;
   stockLevel?: number;
   description?: string;
+  sourceUrl?: string;
 }
 
 interface CartItem {
@@ -73,7 +74,9 @@ function NikeStoreContent() {
   const [checkoutBusy,setCheckoutBusy]=useState(false);
   const [orderMessage,setOrderMessage]=useState('');
   const [checkoutKey,setCheckoutKey]=useState('');
-  const NIKE_PRODUCTS:ShoeProduct[]=useMemo(()=>(catalogue?.products??[]).filter(p=>p.active).map(p=>({id:p.productId,title:p.name,subtitle:p.subtitle,category:p.category as ShoeProduct['category'],price:p.priceMinor/100,stockLevel:p.availableUnits,isAnomalyRelated:p.availableUnits<=10,description:p.reference?.description,colorways:p.images.length?p.images.map(i=>({name:i.alt,img:i.src})):[{name:'Image unavailable',img:'/assets/product-unavailable.svg'}]})),[catalogue]);
+  const [orders,setOrders]=useState<StoreOrder[]>([]);
+  const orderStorageKey=`normal.nike.orders.v1:${businessId}:${runId}`;
+  const NIKE_PRODUCTS:ShoeProduct[]=useMemo(()=>(catalogue?.products??[]).filter(p=>p.active).map(p=>({id:p.productId,title:p.name,subtitle:p.subtitle,category:p.category as ShoeProduct['category'],price:p.priceMinor/100,stockLevel:p.availableUnits,isAnomalyRelated:p.availableUnits<=10,description:p.reference?.description,sourceUrl:p.reference?.sourceUrl,colorways:p.images.length?p.images.map(i=>({name:i.alt,img:i.src})):[{name:'Image unavailable',img:'/assets/product-unavailable.svg'}]})),[catalogue]);
 
   const [banners, setBanners] = useState<Banner[]>([]);
   const [publications, setPublications] = useState<Publication[]>([]);
@@ -97,6 +100,14 @@ function NikeStoreContent() {
   const [promoIndex, setPromoIndex] = useState(0);
 
   const isOpsMode = true;
+  const loadOrders=useCallback(async()=>{
+    if(!runId)return;
+    let keys:string[]=[];
+    try{const saved=JSON.parse(localStorage.getItem(orderStorageKey)??'[]');if(Array.isArray(saved))keys=saved.filter((key):key is string=>typeof key==='string'&&key.length>=8).slice(0,20);}catch{return;}
+    if(!keys.length)return;
+    const response=await fetch(`/api/demo-store/orders?${new URLSearchParams({businessId,simulationRunId:runId,keys:keys.join(',')})}`,{cache:'no-store'});
+    if(response.ok)setOrders((await response.json()).orders);
+  },[businessId,runId,orderStorageKey]);
   const load = useCallback(async () => {
     if(!runId)return;
     const r=await fetch(`/api/demo-store/products?${new URLSearchParams({businessId,simulationRunId:runId})}`,{cache:'no-store'});
@@ -104,14 +115,16 @@ function NikeStoreContent() {
     setCatalogue(b);setBanners((b.banners??[]).map((v:Banner)=>({...v,active:true})));setPublications([]);setError('');
   },[businessId,runId]);
   useEffect(()=>{let live=true;const poll=()=>{if(live)void load().catch(e=>{if(live)setError(String(e))})};
-    void Promise.resolve().then(()=>{if(live){setCatalogue(null);setCartItems([]);setSizeModalProduct(null);setOrderMessage('');setCheckoutKey(crypto.randomUUID());poll()}});
+    void Promise.resolve().then(()=>{if(live){setCatalogue(null);setCartItems([]);setSizeModalProduct(null);setOrderMessage('');setCheckoutKey(crypto.randomUUID());poll();void loadOrders().catch(()=>{})}});
     const t=setInterval(poll,15000);return()=>{live=false;clearInterval(t)};
-  },[load]);
+  },[load,loadOrders]);
   async function placeOrder(){
     if(!runId||checkoutBusy||!cartItems.length)return;setCheckoutBusy(true);setError('');
     try{const r=await fetch('/api/demo-store/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({businessId,simulationRunId:runId,idempotencyKey:checkoutKey,items:cartItems.map(i=>({productId:i.productId,quantity:i.quantity}))})});
       const b=await r.json();if(!r.ok)throw new Error(b.message??b.error?.message??'Checkout failed');
-      setOrderMessage(`Order ${b.order.orderId} persisted · £${(b.order.netRevenueMinor/100).toFixed(2)} · ${b.order.status}`);setCartItems([]);setCheckoutKey(crypto.randomUUID());await load();
+      setOrders(previous=>[b.order,...previous.filter(order=>order.orderId!==b.order.orderId)].slice(0,20));
+      try{const saved=JSON.parse(localStorage.getItem(orderStorageKey)??'[]');const keys=Array.isArray(saved)?saved.filter((key):key is string=>typeof key==='string'):[];localStorage.setItem(orderStorageKey,JSON.stringify([checkoutKey,...keys.filter(key=>key!==checkoutKey)].slice(0,20)));}catch{/* Purchase receipts remain available for this visit when storage is disabled. */}
+      setOrderMessage(`Order ${b.order.orderId} persisted · £${(b.order.netRevenueMinor/100).toFixed(2)} · ${b.order.status}`);setCartItems([]);setIsCartOpen(false);setCheckoutKey(crypto.randomUUID());await load();
     }catch(e){setError((e as Error).message)}finally{setCheckoutBusy(false)}
   }
 
@@ -228,9 +241,10 @@ function NikeStoreContent() {
       <div className="bg-black text-white px-12 py-2 text-xs flex justify-between"><a href={withRun('/dashboard')}>← Normal overview</a><span>Unaffiliated Nike simulation · {runId}</span><a href={withRun('/dashboard/approvals')}>Approvals</a></div>
       {orderMessage&&<div role="status" className="bg-emerald-50 p-4 text-emerald-800">{orderMessage}</div>}
       {error&&<div role="alert" className="bg-red-50 p-4 text-red-800">{error}</div>}
+      {orders.length>0&&<section data-testid="your-orders" aria-label="Your simulated orders" className="border-b border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><h2 className="font-semibold">Your simulated orders</h2><p>No payment was taken. These receipts are saved in the selected simulation.</p>{orders.map(order=><div key={order.orderId} data-testid="order-confirmation" className="mt-2"><strong>{order.orderId}</strong><span> · {order.lines.map(line=>`${line.quantity}× ${line.name}`).join(', ')} · £{(order.netRevenueMinor/100).toFixed(2)}</span></div>)}</section>}
       {!catalogue&&!error&&<p className="p-6">Loading MongoDB catalogue…</p>}
       {/* 1. Global Utility Sub-Brand Bar */}
-      <div className="bg-[#f5f5f5] px-12 h-9 flex justify-between items-center text-[12px] text-[#111111] font-medium border-b border-[#e5e5e5]">
+      <div className="bg-[#f5f5f5] px-12 h-9 hidden md:flex justify-between items-center text-[12px] text-[#111111] font-medium border-b border-[#e5e5e5]">
         <div className="flex items-center gap-7">
           {/* Jordan Jumpman Icon */}
           <a aria-disabled="true" className="hover:opacity-70 transition-opacity" title="Jordan">
@@ -283,7 +297,7 @@ function NikeStoreContent() {
       </div>
 
       {/* 2. Main Nike Navigation Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#e5e5e5] px-12 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-white border-b border-[#e5e5e5] px-4 sm:px-12 h-16 flex items-center justify-between">
         {/* Nike Official Swoosh SVG */}
         <a href={withRun("/demo-store")} className="flex-shrink-0" title="Nike Home">
           <svg
@@ -335,25 +349,27 @@ function NikeStoreContent() {
         </nav>
 
         {/* Right Utility: Search & Icons */}
-        <div className="flex items-center gap-4">
-          <div className="relative">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <form role="search" className="relative" onSubmit={event=>event.preventDefault()}>
             <input
               type="text"
               placeholder="Search"
+              aria-label="Search products"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-48 bg-[#f5f5f5] hover:bg-[#e5e5e5] focus:bg-white text-[14px] text-[#111111] rounded-full pl-10 pr-4 py-2 outline-none border border-transparent focus:border-zinc-300 transition-all placeholder:text-[#707072]"
+              className="w-32 sm:w-48 bg-[#f5f5f5] hover:bg-[#e5e5e5] focus:bg-white text-[14px] text-[#111111] rounded-full pl-10 pr-4 py-2 outline-none border border-transparent focus:border-zinc-300 transition-all placeholder:text-[#707072]"
             />
             <Search className="w-4 h-4 text-[#111111] absolute left-3.5 top-1/2 -translate-y-1/2" />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-black cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
-          </div>
+          </form>
 
           {/* Favorites Button */}
           <button
@@ -453,9 +469,9 @@ function NikeStoreContent() {
       )}
 
       {/* 5. Main PLP View */}
-      <main className="px-12 py-7 w-full flex-1 max-w-[1920px] mx-auto">
+      <main className="px-4 sm:px-12 py-7 w-full min-w-0 flex-1 max-w-[1920px] mx-auto">
         {/* Category Header Row with Interactive Sort By Dropdown */}
-        <div className="flex items-center justify-between pb-4 mb-4 relative">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between pb-4 mb-4 relative">
           <h1 className="text-[24px] font-medium text-[#111111]">
             Nike catalogue ({filteredProducts.length})
           </h1>
@@ -584,7 +600,7 @@ function NikeStoreContent() {
           )}
 
           {/* Product Cards Grid: Smooth 3 or 4 Column Dynamic Layout */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div
               className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-12 ${
                 showFilters ? "lg:grid-cols-3" : "lg:grid-cols-4"
@@ -629,7 +645,7 @@ function NikeStoreContent() {
                     </div>
 
                     {/* Colorway Miniature Thumbnails */}
-                    <div className="flex items-center gap-1.5 mt-3 mb-2 min-h-[36px]">
+                    <div className="flex items-center gap-1.5 mt-3 mb-2 min-h-[36px] overflow-x-auto">
                       {product.colorways.map((cw, idx) => (
                         <button
                           key={idx}
@@ -777,7 +793,7 @@ function NikeStoreContent() {
       {/* SIZE SELECTION MODAL */}
       {sizeModalProduct && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 p-6">
+          <div role="dialog" aria-modal="true" aria-label={sizeModalProduct.title} data-testid="product-drawer" className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90dvh] overflow-y-auto animate-in fade-in zoom-in-95 p-6">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="font-bold text-lg text-black">{sizeModalProduct.title}</h3>
@@ -792,6 +808,7 @@ function NikeStoreContent() {
               <ProductImage src={sizeModalProduct.colorways[activeColorwayIndex[sizeModalProduct.id]??0]?.img} alt={sizeModalProduct.title} className="w-full h-52 object-contain"/>
               <div className="flex gap-2 overflow-auto">{sizeModalProduct.colorways.map((image,index)=><button key={image.img} aria-label={`View ${index+1}`} onClick={()=>setActiveColorwayIndex(v=>({...v,[sizeModalProduct.id]:index}))}><ProductImage src={image.img} alt={image.name} className="w-12 h-12 object-contain"/></button>)}</div>
               <p>{sizeModalProduct.description}</p><p className="text-sm text-zinc-500">{sizeModalProduct.stockLevel} units in stock. Inventory is tracked by product; sizes are not modelled.</p>
+              <p className="text-sm text-zinc-500">Stock levels and purchases are simulated and are not Nike data. {sizeModalProduct.sourceUrl&&<a href={sizeModalProduct.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">nike.com/gb</a>}</p>
             </div>
 
             <div className="flex gap-3">
@@ -803,10 +820,12 @@ function NikeStoreContent() {
               </button>
               <button
                 onClick={() => handleQuickAdd(sizeModalProduct, selectedSize)}
+                disabled={!sizeModalProduct.stockLevel}
+                data-testid="add-to-cart"
                 className="w-2/3 py-3 bg-black hover:bg-zinc-800 text-white rounded-full font-bold text-sm shadow flex items-center justify-center gap-2"
               >
                 <ShoppingBag className="w-4 h-4" />
-                <span>Add to Bag</span>
+                <span>{sizeModalProduct.stockLevel?'Add to Bag':'Sold out'}</span>
               </button>
             </div>
           </div>
@@ -816,7 +835,7 @@ function NikeStoreContent() {
       {/* SHOPPING BAG SLIDE-OVER DRAWER */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end animate-in fade-in">
-          <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+          <div role="dialog" aria-modal="true" aria-label="Bag" data-testid="cart-drawer" className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
             {/* Drawer Header */}
             <div className="px-6 py-5 border-b border-[#e5e5e5] flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -846,7 +865,7 @@ function NikeStoreContent() {
                 </div>
               ) : (
                 cartItems.map((item) => (
-                  <div key={item.cartId} className="flex gap-4 pb-6 border-b border-[#e5e5e5]">
+                  <div key={item.cartId} data-testid={`cart-line-${item.productId}`} className="flex gap-4 pb-6 border-b border-[#e5e5e5]">
                     <div className="w-20 h-20 bg-[#f6f6f6] rounded p-2 flex-shrink-0 flex items-center justify-center">
                       <ProductImage src={item.img} alt={item.title} className="w-full h-full object-contain mix-blend-multiply" />
                     </div>
@@ -864,6 +883,7 @@ function NikeStoreContent() {
                         <div className="flex items-center border border-zinc-300 rounded">
                           <button
                             onClick={() => updateCartQuantity(item.cartId, -1)}
+                            aria-label={`Decrease ${item.title}`}
                             className="p-1 hover:bg-zinc-100 text-zinc-600"
                           >
                             <Minus className="w-3 h-3" />
@@ -871,6 +891,8 @@ function NikeStoreContent() {
                           <span className="px-2 text-xs font-bold">{item.quantity}</span>
                           <button
                             onClick={() => updateCartQuantity(item.cartId, 1)}
+                            aria-label={`Increase ${item.title}`}
+                            disabled={item.quantity>=Math.min(5,NIKE_PRODUCTS.find(product=>product.id===item.productId)?.stockLevel??0)}
                             className="p-1 hover:bg-zinc-100 text-zinc-600"
                           >
                             <Plus className="w-3 h-3" />
@@ -911,6 +933,7 @@ function NikeStoreContent() {
 
                 {error&&<p role="alert" className="text-red-700">{error}</p>}{orderMessage&&<p role="status">{orderMessage}</p>}
                 <button
+                  data-testid="place-order"
                   disabled={checkoutBusy || cartItems.length===0} onClick={placeOrder}
                   className="w-full bg-black hover:bg-zinc-800 text-white font-bold py-3.5 rounded-full text-sm shadow-md transition-all cursor-pointer"
                 >

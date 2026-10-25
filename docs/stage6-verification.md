@@ -25,7 +25,7 @@ Request history is retained honestly:
 | `mreq_01a170a09c2c775184fffe17575bd54c` | Fresh generation with existing verified campaign details; recommended valid targeted budget proposal | 14,103 |
 | `mreq_01a170a089347992a28b32b637d4f5a2` | Saved checkout diagnosis; three advisory strategies, zero executable actions | 3,103 |
 
-All used Mubit `gpt-6-luna`. Prompt version changed from initial `solution-planner-v1` to `solution-planner-v2` during implementation; v2 fingerprints remain independent of changing inputs. Request IDs, input checksums, task fingerprints, output, checks and usage are persisted in the existing model-call ledger. Cost remains unknown because provider rates are unconfigured. No training/improvement claim is made.
+All used the configured Mubit base model. Prompt version changed from initial `solution-planner-v1` to `solution-planner-v2` during implementation; v2 fingerprints remain independent of changing inputs. Request IDs, input checksums, task fingerprints, output, checks and usage are persisted in the existing model-call ledger. Cost remains unknown because provider rates are unconfigured. No training/improvement claim is made.
 
 During development an overbroad numeric-prose check also rejected an operational “25% budget reduction” as a forecast. It was corrected to distinguish action parameters from precise performance/probability forecasts. The final validator additionally requires campaign-specific efficiency deterioration, rather than treating aggregate advertising evidence as sufficient to target every campaign.
 
