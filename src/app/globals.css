@@ -1409,6 +1409,13 @@ body:has(.signals-page) > .demo-disclaimer { display: none; }
 }
 
 /* Utility classes used by the pasted Meta Ads Manager page. */
+/* Scoped partner preflight: retain Normal's existing dashboard styles. */
+:where([data-meta-copy-page], .partner-store, .partner-shopify) :where(*, ::before, ::after) { border-width: 0; border-style: solid; }
+:where([data-meta-copy-page], .partner-store, .partner-shopify) :where(button, input, select, textarea) { font-family: inherit; font-size: inherit; line-height: inherit; color: inherit; margin: 0; }
+:where([data-meta-copy-page], .partner-store, .partner-shopify) :where(button) { background-color: transparent; background-image: none; }
+:where([data-meta-copy-page], .partner-store, .partner-shopify) :where(button:disabled) { cursor: not-allowed; }
+:where([data-meta-copy-page], .partner-store, .partner-shopify) :where(th) { text-transform: none; letter-spacing: normal; }
+:where(.partner-store, .partner-shopify) { color-scheme: light; }
 @tailwind utilities;
 body:has([data-meta-copy-page]) { width: 100vw; height: 100svh; min-height: 0; overflow: hidden; }
 body:has([data-meta-copy-page]) > .demo-disclaimer { display: none; }

@@ -197,7 +197,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("stage-observe")).toHaveAttribute("data-status", "operational");
     await expect(page.getByTestId("stage-detect")).toHaveAttribute("data-status", "operational");
     await expect(page.getByTestId("stage-investigate")).toHaveAttribute("data-status", "waiting_for_data");
-    await expect(page.getByTestId("stage-execute")).toHaveAttribute("data-status", "partner_pending");
+    await expect(page.getByTestId("stage-execute")).toHaveAttribute("data-status", "waiting_for_data");
     await page.getByTestId("stage-retrieve").click();
     await expect(page).toHaveURL(/stage=retrieve/);
     await expect(page.getByTestId("stage-panel")).toContainText("8 tools registered");
@@ -207,7 +207,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("stage-panel")).toHaveAttribute("data-capability-status", "Waiting for data");
     await expect(page.getByTestId("stage-panel")).toContainText("ProposedPlan");
     await page.getByTestId("stage-approve").click();
-    await expect(page.getByTestId("stage-panel")).toHaveAttribute("data-capability-status", "Partner integration pending");
+    await expect(page.getByTestId("stage-panel")).toHaveAttribute("data-capability-status", "Waiting for data");
   });
 
   test("investigation workspace collects evidence, shows tools and real records, resolves a source, survives refresh and isolates runs", async ({ page, request }) => {
@@ -220,7 +220,7 @@ test.describe.serial("unified dashboard and evidence retrieval", () => {
     await expect(page.getByTestId("generate-plan")).toBeDisabled();
     await expect(page.getByTestId("planning-blocked")).toContainText("saved Stage 5 report");
     await expect(page.getByTestId("ai-investigation")).toBeVisible();
-    await expect(page.getByTestId("placeholder-execution")).toHaveAttribute("data-capability-status", "Partner integration pending");
+    await expect(page.getByTestId("execution-intake").getByRole("link", { name: "Open Approvals" })).toHaveAttribute("href", `/dashboard/approvals?run=${RUN}`);
 
     await page.getByTestId("collect-evidence").click();
     await expect(page.getByTestId("collection-summary")).toContainText("Status completed", { timeout: 90_000 });

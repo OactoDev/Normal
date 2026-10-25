@@ -1,11 +1,11 @@
 "use client";
 
+import { money,num,pct,virtualDate } from "@/lib/format";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { money, num, pct, virtualDate } from "@/lib/format";
-import { api, q, STATUS_LABEL, statusClass, type Capabilities, type InvestigationRow, type MonitorStatus } from "./api";
-import { useRun } from "./run-context";
+import { useEffect,useState } from "react";
+import { api,q,type Capabilities,type InvestigationRow,type MonitorStatus } from "./api";
 import { PageSkeleton } from "./PageSkeleton";
+import { useRun } from "./run-context";
 
 interface Resource<T> { path: string; data: T | null; error: string | null }
 
@@ -63,21 +63,7 @@ export function InvestigationIndex() {
   </div>;
 }
 
-export function ApprovalsPage() {
-  const { runId, loaded, withRun, data, error } = useScopedResource<Capabilities>((id) => `/api/intelligence/capabilities?${q({ simulationRunId: id })}`);
-  if (!data) return <div className="section-page"><ResourceState loaded={loaded} runId={runId} error={error} /></div>;
-  const stages = ["plan", "approve", "execute"].map((id) => data.stages.find((stage) => stage.id === id)).filter((stage) => stage !== undefined);
-  const approvalStage = stages.find((stage) => stage.id === "approve");
-  return <div className="section-page" data-testid="approvals-page">
-    <p className="section-intro">Review the plan, approval, and execution stages for the selected run. This page reflects recorded system capability and handoff status.</p>
-    <div className="section-stats approval-summary"><Stat label="Approval queue" value="Unavailable" /><Stat label="Selected run" value={runId ? `${runId.slice(0, 12)}…` : "—"} /><Stat label="Approval stage" value={approvalStage ? STATUS_LABEL[approvalStage.status] : "Not reported"} /><Stat label="Decision records" value="None" /></div>
-    <article className="card section-card"><div className="section-card-head"><h2>Plan and approval handoff</h2></div>
-      <div className="section-callout">{approvalStage?.status === "partner_pending" ? "Approval and execution are pending the partner integration. No approval queue or decision is currently exposed for this run." : approvalStage?.summary ?? "No approval stage status is available for this run."}</div>
-      <div className="section-stats stage-status-grid">{stages.map((stage) => <article className="card section-stat" key={stage.id}><small>{stage.name}</small><span className={`section-tag ${statusClass(stage.status)}`}>{STATUS_LABEL[stage.status] ?? stage.status}</span><p className="muted small">{stage.summary}</p><dl className="stage-meta"><div><dt>Backend</dt><dd>{stage.backend}</dd></div><div><dt>Implemented</dt><dd>{stage.implemented ? "Yes" : "No"}</dd></div></dl></article>)}</div>
-      <div className="section-links"><Link className="btn" href={withRun("/dashboard/architecture?stage=plan")}>Review architecture stages</Link><Link className="btn" href={withRun("/dashboard/investigations")}>Open investigations</Link></div>
-    </article>
-  </div>;
-}
+export { Approvals as ApprovalsPage } from "./Approvals";
 
 interface ActivityEvent { eventId: string; type: string; occurredAt: string; source: string; payload: Record<string, unknown>; provenance: { ingestMethod: string } }
 interface ActivityResponse { simulationRunId: string | null; events: ActivityEvent[] }

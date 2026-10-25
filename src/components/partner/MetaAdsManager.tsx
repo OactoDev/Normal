@@ -1,76 +1,53 @@
+// Partner Meta Ads Manager from origin/kris f9bc19d; Normal MongoDB binding.
 "use client";
 
-import { Suspense, useState, useEffect, useMemo, useCallback, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import { api, q } from "./api";
-import { RunProvider, useRun } from "./run-context";
+import { api,q } from "@/components/normal/api";
+import { PageSkeleton } from "@/components/normal/PageSkeleton";
+import { RunProvider,useRun } from "@/components/normal/run-context";
 import { money } from "@/lib/format";
-import { PageSkeleton } from "./PageSkeleton";
 import {
-  Search,
-  Plus,
-  Copy,
-  Edit2,
-  Sparkles,
-  RefreshCw,
-  MoreHorizontal,
-  ChevronDown,
-  Layers,
-  Folder,
-  FileText,
-  SlidersHorizontal,
-  Download,
-  Calendar,
-  Zap,
-  HelpCircle,
-  Settings,
-  CreditCard,
-  BarChart2,
-  Users,
-  Grid,
-  Info,
-  ShieldCheck,
-  Eye,
-  EyeOff,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Filter,
-  Check,
-  Trash2,
-  X,
-  Pencil,
-  Clock,
-  Send,
-  CornerUpRight,
-  Inbox,
-  FlaskConical,
-  Columns,
-  Maximize2,
-  User,
-  Bell,
-  SendHorizonal,
-  Mailbox,
-  Upload,
-  Gauge,
-  Table2,
-  Files,
-  Megaphone,
-  Workflow,
-  Menu,
-  Bug,
-  CircleArrowUp,
-  Navigation,
-  MailOpen,
-  Settings2,
-  Columns3,
-  AlignLeft,
-  LayoutGrid,
-  PanelTop,
-  ScrollText,
-  SquareActivity,
-  ChartNoAxesColumn
+AlignLeft,
+ArrowDown,
+ArrowUpDown,
+Bell,
+Bug,
+Calendar,
+Check,
+CircleArrowUp,
+Columns3,
+Copy,
+CreditCard,
+Download,
+Files,
+FlaskConical,
+Folder,
+Gauge,
+HelpCircle,
+Layers,
+LayoutGrid,
+MailOpen,
+Megaphone,
+Menu,
+MoreHorizontal,
+Navigation,
+PanelTop,
+Pencil,
+Plus,
+RefreshCw,
+ScrollText,
+Search,
+Settings,
+Settings2,
+SquareActivity,
+Table2,
+User,
+Users,
+Workflow,
+X
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Suspense,useCallback,useEffect,useMemo,useState } from "react";
+import { CampaignHistory } from "./CampaignHistory";
 
 // Small solid caret used on Meta's dropdown buttons
 function Caret({ className = "w-[9px] h-[9px]" }: { className?: string }) {
@@ -126,31 +103,6 @@ function OpportunityGauge({ score = 100 }: { score?: number }) {
   );
 }
 
-// Blue rosette shown after accepting the policy
-function PolicyBadge() {
-  return (
-    <svg className="w-[47px] h-[47px]" viewBox="0 0 47 47" aria-hidden="true">
-      <circle cx="23.5" cy="23.5" r="23.5" fill="#4675dd" />
-      <path d="M20.4 25.4l-1.6 6.1 2.6-1.3 2.1 1.6 2.1-1.6 2.6 1.3-1.6-6.1z" fill="#fff" />
-      <circle cx="23.5" cy="20.6" r="6.6" fill="#fff" />
-      <path d="M20.6 20.8l2 2 3.9-4" fill="none" stroke="#4675dd" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// Official Nike Swoosh Vector for Nike Official Profile Photo
-function NikeSwoosh({ className = "w-3.5 h-3.5 fill-white" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24">
-      <path
-        fillRule="evenodd"
-        d="M21 8.719L7.836 14.303C6.74 14.768 5.818 15 5.075 15c-.836 0-1.445-.295-1.819-.884-.485-.76-.273-1.982.559-3.272.494-.754 1.122-1.446 1.734-2.108-.144.234-1.415 2.349-.025 3.345.275.2.666.298 1.147.298.386 0 .829-.063 1.316-.19L21 8.719z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-}
-
 type Metric = {
   metricId: string;
   campaignId: string;
@@ -192,6 +144,8 @@ type AdsData = {
 interface SimulatorApiData {
   simulationRunId: string;
   window: { startAt: string; endAt: string };
+  daily: Array<{window:{startAt:string;endAt:string};counters:Record<string,number|null>}>;
+  comparison: Array<{campaignId:string;roas:number|null;spendMinor:number}>;
   campaigns: CampaignRecord[];
   campaignPerformance: { campaignId: string; impressions: number; clicks: number; spendMinor: number; attributedOrders: number; attributedRevenueMinor: number; roas: number | null }[];
   allActions: { actionId: string; campaignId: string; toolName: string; recordedAt: string; verification: string; agent: string | null; title: string | null; planId: string | null; previousDailyBudgetMinor: number | null; newDailyBudgetMinor: number | null }[];
@@ -209,6 +163,8 @@ interface CampaignItem {
   amountSpent: number;
   reach: number;
   tickets: number;
+  clicks: number;
+  ctr: number | null;
   costPerTicket: number;
   coursePurchases: number;
   costPerCoursePurchase: number;
@@ -300,6 +256,8 @@ function toCampaignItems(data: AdsData): CampaignItem[] {
       currency: campaign.currency,
       amountSpent,
       reach: metric?.impressions ?? 0,
+      clicks: metric?.clicks ?? 0,
+      ctr: metric?.impressions ? (metric.clicks / metric.impressions) : null,
       tickets: 0,
       costPerTicket: 0,
       coursePurchases: conversions,
@@ -322,55 +280,34 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
   const selectedRun = runs.find((run) => run.simulationRunId === runId);
   const [data, setData] = useState<AdsData>({ campaigns: [], events: [], metrics: [], simulationRunId: "", window: { startAt: "", endAt: "" } });
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("campaigns");
   const [searchQuery, setSearchQuery] = useState("");
   const [rangeDays, setRangeDays] = useState(30);
   const [filterPreset, setFilterPreset] = useState<FilterPreset>("all");
   const [sortField, setSortField] = useState<string>("amountSpent");
   const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [showHistory,setShowHistory]=useState(false);
+  const [detail,setDetail]=useState<SimulatorApiData|null>(null);
   const [showResultsBar, setShowResultsBar] = useState<boolean>(true);
 
   // Non-discrimination policy modal states (1:1 with Screenshots 1 & 2)
 
   // Start with the live campaign list so the real run data is visible immediately.
-  const [viewEmptyState, setViewEmptyState] = useState<boolean>(false);
-
-  // Drill-down filtering states
-  const [selectedCampaignDrill, setSelectedCampaignDrill] = useState<string | null>(null);
-  const [selectedAdSetDrill, setSelectedAdSetDrill] = useState<string | null>(null);
+  const viewEmptyState = false;
 
   // Toggles for on/off states
   const [campaignToggles, setCampaignToggles] = useState<Record<string, boolean>>({});
-  const [adSetToggles, setAdSetToggles] = useState<Record<string, boolean>>({});
-  const [adToggles, setAdToggles] = useState<Record<string, boolean>>({});
 
   // Table selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAuditDrawer, setShowAuditDrawer] = useState(false);
-
-  // Modals & Popovers
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const [showScoreDropdown, setShowScoreDropdown] = useState(false);
   const [showDateDropdown, setShowDateDropdown] = useState(false);
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-
-  // Form states for Create/Edit
-  const [formCampaignName, setFormCampaignName] = useState("");
-  const [formDailyBudget, setFormDailyBudget] = useState("35.00");
-  const [formObjective, setFormObjective] = useState("Sales");
 
   // Editable lists
   const [campaignsList, setCampaignsList] = useState<CampaignItem[]>(INITIAL_CAMPAIGNS);
-  const [adSetsList, setAdSetsList] = useState<AdSetItem[]>(INITIAL_AD_SETS);
-  const [adsList, setAdsList] = useState<AdItem[]>(INITIAL_ADS);
-
-  // Inline budget editing
-  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
-  const [inlineBudgetValue, setInlineBudgetValue] = useState("");
 
   const rangeEndAt = data.window.endAt || selectedRun?.virtualTime || "";
   const rangeStartAt = data.window.startAt || (rangeEndAt ? new Date(Date.parse(rangeEndAt) - rangeDays * 86_400_000).toISOString() : "");
@@ -383,6 +320,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
       const next = await api<SimulatorApiData>(`/api/dev/simulator/campaigns/${encodeURIComponent(campaignId)}?${q({ simulationRunId: runId, days: rangeDays })}`);
       const mapped = toAdsData(next, rangeDays);
       setData(mapped);
+      setDetail(next);
       const rows = toCampaignItems(mapped);
       setCampaignsList(rows);
       setCampaignToggles(Object.fromEntries(rows.map((campaign) => [campaign.id, campaign.status === "active"])));
@@ -403,22 +341,6 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
       clearInterval(t);
     };
   }, [fetchCampaigns, loaded, runId]);
-
-  async function tick() {
-    setBusy(true);
-    try {
-      await fetchCampaigns();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Find latest agent budget change event
-  const latestChangeEvent = useMemo(() => {
-    return data.events
-      .filter((e) => e.type === "campaign.budget_updated" || e.payload?.campaignId)
-      .sort((x, y) => y.occurredAt.localeCompare(x.occurredAt))[0];
-  }, [data.events]);
 
   const toggleSelectRow = (id: string) => {
     setSelectedIds((prev) => {
@@ -446,7 +368,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
     if (filterPreset === "delivery") {
       list = list.filter((c) => c.amountSpent > 0 || c.reach > 0);
     } else if (filterPreset === "actions") {
-      list = list.filter((c) => c.tickets > 0 || c.coursePurchases > 0);
+      list = list.filter((c) => data.events.some(e=>e.payload.campaignId===c.id));
     } else if (filterPreset === "active") {
       list = list.filter((c) => campaignToggles[c.id] !== false);
     }
@@ -470,77 +392,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
     });
 
     return list;
-  }, [campaignsList, filterPreset, searchQuery, sortField, sortAsc, campaignToggles]);
-
-  // Filtered & Sorted Ad Sets
-  const filteredAdSets = useMemo(() => {
-    let list = [...adSetsList];
-
-    if (selectedCampaignDrill) {
-      list = list.filter((s) => s.campaignId === selectedCampaignDrill);
-    }
-
-    if (filterPreset === "delivery") {
-      list = list.filter((s) => s.amountSpent > 0 || s.reach > 0);
-    } else if (filterPreset === "actions") {
-      list = list.filter((s) => s.tickets > 0 || s.purchases > 0);
-    } else if (filterPreset === "active") {
-      list = list.filter((s) => adSetToggles[s.id] !== false);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((s) => s.name.toLowerCase().includes(q) || s.subtitle.toLowerCase().includes(q));
-    }
-
-    list.sort((a, b) => {
-      const vA = (a as unknown as Record<string, unknown>)[sortField] ?? 0;
-      const vB = (b as unknown as Record<string, unknown>)[sortField] ?? 0;
-      if (typeof vA === "string") {
-        return sortAsc
-          ? (vA as string).localeCompare(vB as string)
-          : (vB as string).localeCompare(vA as string);
-      }
-      return sortAsc ? (vA as number) - (vB as number) : (vB as number) - (vA as number);
-    });
-
-    return list;
-  }, [adSetsList, selectedCampaignDrill, filterPreset, searchQuery, sortField, sortAsc, adSetToggles]);
-
-  // Filtered & Sorted Ads
-  const filteredAds = useMemo(() => {
-    let list = [...adsList];
-
-    if (selectedAdSetDrill) {
-      list = list.filter((a) => a.adSetId === selectedAdSetDrill);
-    }
-
-    if (filterPreset === "delivery") {
-      list = list.filter((a) => a.amountSpent > 0 || a.landingPageViews > 0);
-    } else if (filterPreset === "actions") {
-      list = list.filter((a) => a.tickets > 0);
-    } else if (filterPreset === "active") {
-      list = list.filter((a) => adToggles[a.id] !== false);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((a) => a.name.toLowerCase().includes(q));
-    }
-
-    list.sort((a, b) => {
-      const vA = (a as unknown as Record<string, unknown>)[sortField] ?? 0;
-      const vB = (b as unknown as Record<string, unknown>)[sortField] ?? 0;
-      if (typeof vA === "string") {
-        return sortAsc
-          ? (vA as string).localeCompare(vB as string)
-          : (vB as string).localeCompare(vA as string);
-      }
-      return sortAsc ? (vA as number) - (vB as number) : (vB as number) - (vA as number);
-    });
-
-    return list;
-  }, [adsList, selectedAdSetDrill, filterPreset, searchQuery, sortField, sortAsc, adToggles]);
+  }, [campaignsList, filterPreset, searchQuery, sortField, sortAsc, campaignToggles, data.events]);
 
   // Dynamic Totals Calculation for Campaigns
   const campaignTotals = useMemo(() => {
@@ -565,188 +417,16 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
     };
   }, [filteredCampaigns]);
 
-  // Dynamic Totals Calculation for Ad Sets
-  const adSetTotals = useMemo(() => {
-    const totalSpent = filteredAdSets.reduce((acc, s) => acc + s.amountSpent, 0);
-    const totalReach = filteredAdSets.reduce((acc, s) => acc + s.reach, 0);
-    const totalTickets = filteredAdSets.reduce((acc, s) => acc + s.tickets, 0);
-    const totalPurchases = filteredAdSets.reduce((acc, s) => acc + s.purchases, 0);
-    const totalConversionVal = filteredAdSets.reduce((acc, s) => acc + s.conversionValue, 0);
-    const costPerTicket = totalTickets > 0 ? Math.round(totalSpent / totalTickets) : 0;
-    const costPerPurchase = totalPurchases > 0 ? Math.round(totalSpent / totalPurchases) : 0;
-    const avgRoas = totalSpent > 0 ? +(totalConversionVal / totalSpent).toFixed(2) : 0;
+  const openApprovals = () => router.push(withRun('/dashboard/approvals'));
 
-    return {
-      totalSpent,
-      totalReach,
-      totalTickets,
-      totalPurchases,
-      totalConversionVal,
-      costPerTicket,
-      costPerPurchase,
-      avgRoas
-    };
-  }, [filteredAdSets]);
-
-  // Toolbar Handlers: Create, Duplicate, Edit, Delete
-  const handleCreateCampaign = (e: FormEvent) => {
-    e.preventDefault();
-    const budgetNum = parseFloat(formDailyBudget) || 30;
-    const newId = `campaign_${Date.now()}`;
-    const newCamp: CampaignItem = {
-      id: newId,
-      name: formCampaignName || "New Campaign",
-      subtitle: `${formObjective} · UK`,
-      budgetMinor: Math.round(budgetNum * 100),
-      currency: "GBP",
-      amountSpent: 0,
-      reach: 0,
-      tickets: 0,
-      costPerTicket: 0,
-      coursePurchases: 0,
-      costPerCoursePurchase: 0,
-      conversionValue: 0,
-      roas: 0,
-      status: "active"
-    };
-
-    setCampaignsList((prev) => [newCamp, ...prev]);
-    setCampaignToggles((prev) => ({ ...prev, [newId]: true }));
-    setSelectedIds(new Set([newId]));
-    setShowCreateModal(false);
-    setFormCampaignName("");
-  };
-
-  const handleDuplicateSelected = () => {
-    if (selectedIds.size === 0) return;
-
-    if (activeTab === "campaigns") {
-      const duplicated: CampaignItem[] = [];
-      campaignsList.forEach((c) => {
-        if (selectedIds.has(c.id)) {
-          const dupId = `${c.id}_copy_${Date.now()}`;
-          duplicated.push({
-            ...c,
-            id: dupId,
-            name: `${c.name} (Copy)`,
-            amountSpent: 0,
-            reach: 0,
-            tickets: 0,
-            coursePurchases: 0,
-            conversionValue: 0,
-            roas: 0
-          });
-          setCampaignToggles((prev) => ({ ...prev, [dupId]: true }));
-        }
-      });
-      setCampaignsList((prev) => [...duplicated, ...prev]);
-    } else if (activeTab === "ad_sets") {
-      const duplicated: AdSetItem[] = [];
-      adSetsList.forEach((s) => {
-        if (selectedIds.has(s.id)) {
-          const dupId = `${s.id}_copy_${Date.now()}`;
-          duplicated.push({
-            ...s,
-            id: dupId,
-            name: `${s.name} (Copy)`,
-            amountSpent: 0,
-            reach: 0,
-            tickets: 0,
-            purchases: 0,
-            conversionValue: 0,
-            roas: 0
-          });
-          setAdSetToggles((prev) => ({ ...prev, [dupId]: true }));
-        }
-      });
-      setAdSetsList((prev) => [...duplicated, ...prev]);
-    } else if (activeTab === "ads") {
-      const duplicated: AdItem[] = [];
-      adsList.forEach((a) => {
-        if (selectedIds.has(a.id)) {
-          const dupId = `${a.id}_copy_${Date.now()}`;
-          duplicated.push({
-            ...a,
-            id: dupId,
-            name: `${a.name} (Copy)`,
-            amountSpent: 0,
-            landingPageViews: 0,
-            tickets: 0,
-            costPerTicket: 0
-          });
-          setAdToggles((prev) => ({ ...prev, [dupId]: true }));
-        }
-      });
-      setAdsList((prev) => [...duplicated, ...prev]);
-    }
-  };
-
-  const handleDeleteSelected = () => {
-    if (selectedIds.size === 0) return;
-    if (activeTab === "campaigns") {
-      setCampaignsList((prev) => prev.filter((c) => !selectedIds.has(c.id)));
-    } else if (activeTab === "ad_sets") {
-      setAdSetsList((prev) => prev.filter((s) => !selectedIds.has(s.id)));
-    } else if (activeTab === "ads") {
-      setAdsList((prev) => prev.filter((a) => !selectedIds.has(a.id)));
-    }
-    setSelectedIds(new Set());
-  };
-
-  const handleSaveInlineBudget = (campaignId: string) => {
-    const num = parseFloat(inlineBudgetValue);
-    if (!isNaN(num) && num > 0) {
-      setCampaignsList((prev) =>
-        prev.map((c) => (c.id === campaignId ? { ...c, budgetMinor: Math.round(num * 100) } : c))
-      );
-    }
-    setInlineEditingId(null);
-  };
 
   const handleExportCSV = () => {
-    let rows: string[][] = [];
-    if (activeTab === "campaigns") {
-      rows = [
-        ["ID", "Name", "Budget", "Amount Spent", "Impressions", "Tickets", "Purchases", "ROAS"],
-        ...filteredCampaigns.map((c) => [
-          c.id,
-          c.name,
-          (c.budgetMinor / 100).toFixed(2),
-          c.amountSpent.toString(),
-          c.reach.toString(),
-          c.tickets.toString(),
-          c.coursePurchases.toString(),
-          c.roas.toString()
-        ])
-      ];
-    } else if (activeTab === "ad_sets") {
-      rows = [
-        ["ID", "Name", "Amount Spent", "Impressions", "Tickets", "Purchases", "ROAS"],
-        ...filteredAdSets.map((s) => [
-          s.id,
-          s.name,
-          s.amountSpent.toString(),
-          s.reach.toString(),
-          s.tickets.toString(),
-          s.purchases.toString(),
-          s.roas.toString()
-        ])
-      ];
-    } else {
-      rows = [
-        ["ID", "Name", "Format", "Amount Spent", "Landing Page Views", "Tickets"],
-        ...filteredAds.map((a) => [
-          a.id,
-          a.name,
-          a.format,
-          a.amountSpent.toString(),
-          a.landingPageViews.toString(),
-          a.tickets.toString()
-        ])
-      ];
-    }
-
-    const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");
+    if(activeTab!=="campaigns")return;
+    const rows = [
+      ["ID","Name","Daily Budget (GBP)","Spend (GBP)","Impressions","Clicks","Attributed orders","Revenue (GBP)","CTR","ROAS"],
+      ...filteredCampaigns.map(c=>[c.id,c.name,(c.budgetMinor/100).toFixed(2),(c.amountSpent/100).toFixed(2),String(c.reach),String(c.clicks),String(c.coursePurchases),(c.conversionValue/100).toFixed(2),c.ctr===null?'':String(c.ctr),c.amountSpent?String(c.roas):''])
+    ];
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.map(value => JSON.stringify(/^[=+@-]/.test(value) ? "\'" + value : value)).join(",")).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -754,17 +434,6 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const renderSortIndicator = (field: string) => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="w-3 h-3 text-zinc-400 inline ml-1 opacity-0 group-hover:opacity-100" />;
-    }
-    return sortAsc ? (
-      <ArrowUp className="w-3 h-3 text-[#0064e0] inline ml-1" />
-    ) : (
-      <ArrowDown className="w-3 h-3 text-[#0064e0] inline ml-1" />
-    );
   };
 
   if (!loaded) {
@@ -793,7 +462,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
 
         <button
           className="relative mt-[14px] w-[34px] h-[34px] flex items-center justify-center text-[#1c2b33] rounded-[6px] hover:bg-[#f2f4f7] cursor-pointer"
-          title="Normal activity"
+          onClick={() => router.push(withRun("/dashboard/activity"))} title="Normal activity"
         >
           <Bell className="w-[20px] h-[20px] stroke-[1.75]" />
         </button>
@@ -810,7 +479,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
           { icon: Workflow, title: "Events Manager" },
           { icon: Menu, title: "All tools" },
         ].map(({ icon: Icon, title, active }) => (
-          <button
+          <button disabled
             key={title}
             title={title}
             className={`w-[34px] h-[34px] my-px flex items-center justify-center rounded-[6px] cursor-pointer transition-colors ${
@@ -829,7 +498,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
             { icon: Search, title: "Search" },
             { icon: Bug, title: "Report a problem" },
           ].map(({ icon: Icon, title }) => (
-            <button key={title} title={title} className="w-[34px] h-[30px] flex items-center justify-center text-[#1c2b33] rounded-[6px] hover:bg-[#f2f4f7] cursor-pointer">
+            <button disabled key={title} title={title} className="w-[34px] h-[30px] flex items-center justify-center text-[#1c2b33] rounded-[6px] hover:bg-[#f2f4f7] cursor-pointer">
               <Icon className="w-[18px] h-[18px] stroke-[1.75]" />
             </button>
           ))}
@@ -840,7 +509,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
       <div className="flex-1 flex flex-col min-w-0 tracking-[-0.2px]">
       <header className="h-[48px] pl-[10px] pr-[7px] flex items-center justify-between gap-3 flex-shrink-0 relative z-30">
         <div className="flex items-center min-w-0">
-          <h1 className="text-[15px] font-bold text-[#1c2b33] flex-shrink-0">Campaigns</h1>
+          <a className="text-xs text-blue-700 mr-3" href={withRun("/dashboard")}>← Normal</a><h1 className="text-[15px] font-bold text-[#1c2b33] flex-shrink-0">Campaigns</h1>
 
           {/* Account selector */}
           <div className="relative ml-[12px] min-w-0">
@@ -924,10 +593,10 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
           </button>
 
           <button
-            disabled
-            className="ml-[7px] h-[30px] px-[13px] bg-[#f5f6f8] text-[#bcc0c4] border border-[#e1e4e8] font-semibold text-[12px] rounded-[6px] cursor-not-allowed"
+            onClick={openApprovals}
+            className="ml-[7px] h-[30px] px-[13px] bg-white text-[#0064e0] border border-[#cbd2d9] font-semibold text-[12px] rounded-[6px] cursor-not-allowed"
           >
-            Review and publish
+            Review approvals
           </button>
 
           <button
@@ -941,9 +610,8 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
           {/* Profile: generic person avatar with the Facebook badge */}
           <div className="relative ml-[7px]">
             <button
-              onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+              disabled title="This is an unaffiliated simulation, not a signed-in Meta account"
               className="relative w-[30px] h-[30px] rounded-full bg-[#e4e6eb] flex items-center justify-center cursor-pointer"
-              title="Account profile"
               aria-label="Account profile"
             >
               <User className="w-[18px] h-[18px] text-[#8a8d91] fill-[#8a8d91]" />
@@ -961,22 +629,23 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
         <div className="h-[43px] pt-[8px] px-[7px] flex items-start justify-between flex-shrink-0">
           <div className="flex items-center gap-[7px]">
             {[
-              { label: "All ads", icon: null, active: true },
-              { label: "Actions", icon: CircleArrowUp },
-              { label: "Active ads", icon: Navigation },
-              { label: "Had delivery", icon: MailOpen },
-            ].map(({ label, icon: Icon, active }) => (
+              { label: "All ads", icon: null, preset: "all" as const },
+              { label: "Actions", icon: CircleArrowUp, preset: "actions" as const },
+              { label: "Active ads", icon: Navigation, preset: "active" as const },
+              { label: "Had delivery", icon: MailOpen, preset: "delivery" as const },
+            ].map(({ label, icon: Icon, preset }) => (
               <button
                 key={label}
+                onClick={()=>setFilterPreset(preset)}
                 className={`h-[35px] px-[11px] flex items-center gap-[8px] rounded-[6px] border text-[12px] font-semibold cursor-pointer ${
-                  active ? "bg-white border-[#7ea8dd] text-[#0a66c2]" : "bg-white border-[#cbd2d9] text-[#1c2b33] hover:bg-[#f7f8fa]"
+                  filterPreset===preset ? "bg-white border-[#7ea8dd] text-[#0a66c2]" : "bg-white border-[#cbd2d9] text-[#1c2b33] hover:bg-[#f7f8fa]"
                 }`}
               >
                 {Icon ? <Icon className="w-[16px] h-[16px] stroke-[1.75]" /> : <Folder className="w-[16px] h-[16px] fill-[#0a66c2] text-[#0a66c2]" />}
                 <span>{label}</span>
               </button>
             ))}
-            <button className="h-[35px] ml-[11px] flex items-center gap-[7px] text-[12px] font-semibold text-[#1c2b33] cursor-pointer hover:underline">
+            <button disabled title="Not supported in this simulation" className="h-[35px] ml-[11px] flex items-center gap-[7px] text-[12px] font-semibold text-[#1c2b33] cursor-pointer hover:underline">
               <Plus className="w-[16px] h-[16px] stroke-[1.75]" />
               <span>See more</span>
             </button>
@@ -984,16 +653,16 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
 
           <div className="flex items-center gap-[4px]">
             <button
-              onClick={() => setViewEmptyState(!viewEmptyState)}
+              disabled
               className="h-[35px] px-[12px] bg-white border border-[#cbd2d9] rounded-[6px] text-[12px] font-semibold text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer"
-              title="Toggle view mode"
+              title="Saved views are not supported"
             >
               Create a view
             </button>
             <button
-              onClick={() => setViewEmptyState(!viewEmptyState)}
+              disabled
               className="w-[34px] h-[35px] flex items-center justify-center bg-white border border-[#cbd2d9] rounded-[6px] text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer"
-              title="Toggle view"
+              title="Saved views are not supported"
             >
               <Settings2 className="w-[16px] h-[16px] stroke-[1.75]" />
             </button>
@@ -1087,11 +756,13 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
           </div>
         </div>
 
+        {showHistory&&detail&&<CampaignHistory name={data.campaigns.find(c=>c.campaignId===campaignId)?.name??campaignId} data={detail.daily} comparison={detail.comparison.find(c=>c.campaignId===campaignId)} />}
+
         {/* Action toolbar (white strip joined to the active tab) */}
         <div className="h-[44px] px-[7px] bg-white flex items-center justify-between gap-[7px] text-[12px] whitespace-nowrap flex-shrink-0">
           <div className="flex items-center gap-[7px] flex-shrink-0">
             <button
-              onClick={() => setShowCreateModal(true)}
+              disabled title="Campaign creation is not supported"
               className="h-[30px] w-[80px] bg-[#00704d] hover:bg-[#005f41] text-white font-semibold rounded-[6px] flex items-center justify-center gap-[7px] transition-colors cursor-pointer"
             >
               <Plus className="w-[16px] h-[16px] stroke-[2]" />
@@ -1099,8 +770,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
             </button>
 
             <button
-              onClick={handleDuplicateSelected}
-              disabled={selectedIds.size === 0}
+              disabled
               className="h-[30px] px-[10px] flex items-center gap-[7px] rounded-[6px] border border-[#e1e4e8] bg-white font-semibold text-[#1c2b33] disabled:text-[#bcc0c4] enabled:hover:bg-[#f7f8fa] enabled:border-[#cbd2d9] cursor-pointer disabled:cursor-default"
               title="Duplicate selected rows"
             >
@@ -1109,32 +779,21 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
             </button>
 
             <button
-              onClick={() => {
-                if (selectedIds.size > 0 && activeTab === "campaigns") {
-                  const targetId = Array.from(selectedIds)[0];
-                  const target = campaignsList.find((c) => c.id === targetId);
-                  if (target) {
-                    setInlineEditingId(target.id);
-                    setInlineBudgetValue((target.budgetMinor / 100).toFixed(2));
-                  }
-                } else {
-                  setShowEditModal(true);
-                }
-              }}
+              onClick={openApprovals}
               disabled={selectedIds.size === 0}
               className={`h-[30px] px-[10px] flex items-center gap-[7px] rounded-[6px] border bg-white font-semibold ${
                 selectedIds.size > 0 ? "border-[#cbd2d9] text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer" : "border-[#e1e4e8] text-[#bcc0c4] cursor-default"
               }`}
-              title="Edit"
+              title="Review approved changes"
             >
               <Pencil className="w-[15px] h-[15px] stroke-[1.75]" />
-              <span>Edit</span>
+              <span>Approvals</span>
             </button>
 
             <span className="w-px h-[22px] bg-[#dadde1] mx-[1px]" />
 
             <button
-              onClick={tick}
+              onClick={() => router.push(withRun("/dashboard/signals"))}
               className="h-[30px] px-[10px] flex items-center gap-[7px] rounded-[6px] border border-[#cbd2d9] bg-white font-semibold text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer"
               title="Run AI Optimisation Analysis"
             >
@@ -1143,7 +802,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
             </button>
 
             <button
-              onClick={() => alert("A/B test workflow initialized.")}
+              disabled
               className="h-[30px] px-[10px] flex items-center gap-[7px] rounded-[6px] border border-[#cbd2d9] bg-white font-semibold text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer"
               title="A/B Test"
             >
@@ -1151,7 +810,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
               <span>A/B test</span>
             </button>
 
-            <button className="h-[30px] px-[7px] ml-[7px] flex items-center gap-[9px] font-semibold text-[#1c2b33] rounded-[6px] hover:bg-[#f2f4f7] cursor-pointer">
+            <button disabled title="Not supported in this simulation" className="h-[30px] px-[7px] ml-[7px] flex items-center gap-[9px] font-semibold text-[#1c2b33] rounded-[6px] hover:bg-[#f2f4f7] cursor-pointer">
               <span>More</span>
               <Caret className="w-[10px] h-[10px]" />
             </button>
@@ -1163,29 +822,29 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
               { label: "Breakdown", icon: AlignLeft },
               { label: "Groups", icon: Layers },
             ].map(({ label, icon: Icon }) => (
-              <button key={label} className={`h-[30px] pl-[10px] pr-[11px] ${label === "Columns" ? "hidden xl:flex" : "flex"} items-center gap-[7px] rounded-[6px] border border-[#cbd2d9] bg-white font-semibold text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer`}>
+              <button disabled title="Not supported in this simulation" key={label} className={`h-[30px] pl-[10px] pr-[11px] ${label === "Columns" ? "hidden xl:flex" : "flex"} items-center gap-[7px] rounded-[6px] border border-[#cbd2d9] bg-white font-semibold text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer`}>
                 <Icon className="w-[15px] h-[15px] stroke-[1.75]" />
                 <span>{label}</span>
                 <Caret className="w-[10px] h-[10px] ml-[5px]" />
               </button>
             ))}
 
-            <button className="h-[30px] w-[54px] hidden xl:flex items-center justify-center gap-[9px] rounded-[6px] border border-[#cbd2d9] bg-white text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer" title="Reports">
+            <button disabled className="h-[30px] w-[54px] hidden xl:flex items-center justify-center gap-[9px] rounded-[6px] border border-[#cbd2d9] bg-white text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer" title="Reports">
               <ScrollText className="w-[15px] h-[15px] stroke-[1.75]" />
               <Caret className="w-[10px] h-[10px]" />
             </button>
 
             <div className="h-[30px] flex rounded-[6px] border border-[#cbd2d9] bg-white text-[#1c2b33] overflow-hidden">
-              <button onClick={handleExportCSV} className="w-[33px] flex items-center justify-center hover:bg-[#f7f8fa] cursor-pointer" title="Export Report to CSV">
+              <button disabled={activeTab!=="campaigns"} onClick={handleExportCSV} className="w-[33px] flex items-center justify-center hover:bg-[#f7f8fa] cursor-pointer" title="Export Report to CSV">
                 <Download className="w-[15px] h-[15px] stroke-[1.75]" />
               </button>
               <span className="w-px bg-[#e1e4e8]" />
-              <button className="w-[32px] flex items-center justify-center hover:bg-[#f7f8fa] cursor-pointer" title="Export options">
+              <button disabled className="w-[32px] flex items-center justify-center hover:bg-[#f7f8fa] cursor-pointer" title="Export options">
                 <Caret className="w-[10px] h-[10px]" />
               </button>
             </div>
 
-            <button className="w-[34px] h-[30px] flex items-center justify-center rounded-[6px] border border-[#cbd2d9] bg-white text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer" title="View charts">
+            <button onClick={()=>setShowHistory(v=>!v)} className="w-[34px] h-[30px] flex items-center justify-center rounded-[6px] border border-[#cbd2d9] bg-white text-[#1c2b33] hover:bg-[#f7f8fa] cursor-pointer" title="View charts">
               <SquareActivity className="w-[15px] h-[15px] stroke-[1.75]" />
             </button>
           </div>
@@ -1229,7 +888,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
 
           {/* TAB 1: CAMPAIGNS */}
           {activeTab === "campaigns" && (
-            <table className="w-full text-left text-[12px] border-collapse table-fixed">
+            <table className="w-full min-w-[1950px] text-left text-[12px] border-collapse table-fixed">
               <thead className="bg-white sticky top-0 z-20 border-y border-[#dcdddf] text-[12px] font-semibold text-[#1c2b33]">
                 <tr className="h-[40px]">
                   <th className="w-[40px] border-r border-[#e4e6eb] text-center">
@@ -1249,9 +908,15 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                     { label: "Delivery", width: "w-[135px]", sort: "delivery", caret: true, active: true },
                     { label: "Actions", width: "w-[169px]", caret: true },
                     { label: "Attribution setting", width: "w-[102px]", caret: true, wrap: true },
-                    { label: "Results", width: "w-[124px]", sort: "conversions", caret: true },
-                    { label: "Cost per result", width: "w-[145px]", sort: "costPerResult", caret: true },
-                    { label: "Budget", width: "", sort: "budgetMinor" },
+                    { label: "Orders", width: "w-[124px]", sort: "coursePurchases", caret: true },
+                    { label: "Cost per result", width: "w-[145px]", sort: "costPerCoursePurchase", caret: true },
+                    { label: "Spend", width: "w-[110px]", sort: "amountSpent" },
+                    { label: "Impressions", width: "w-[110px]", sort: "reach" },
+                    { label: "Clicks", width: "w-[90px]", sort: "clicks" },
+                    { label: "CTR", width: "w-[90px]", sort: "ctr" },
+                    { label: "Revenue", width: "w-[110px]", sort: "conversionValue" },
+                    { label: "ROAS", width: "w-[90px]", sort: "roas" },
+                    { label: "Budget", width: "w-[140px] sticky right-0 bg-white z-20", sort: "budgetMinor" },
                   ].map(({ label, width, sort, caret, active, wrap }) => (
                     <th
                       key={label}
@@ -1277,7 +942,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
               <tbody className="divide-y divide-[#dadde1]">
                 {viewEmptyState || filteredCampaigns.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="pt-[51px] pb-16 text-center bg-[#e9eaec] border-none align-top">
+                    <td colSpan={15} className="pt-[51px] pb-16 text-center bg-[#e9eaec] border-none align-top">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-[38px] h-[38px] rounded-full bg-[#8d95a0] text-white flex items-center justify-center">
                           <Plus className="w-[22px] h-[22px] stroke-[3]" />
@@ -1285,7 +950,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                         <h3 className="mt-[15px] font-bold text-[13.5px] leading-[18px] text-[#1c2b33]">No results found</h3>
                         <p className="mt-[3px] text-[11.75px] leading-[16px] text-[#65676b]">No campaign records are available for this run and filter.</p>
                         <button
-                          onClick={() => setShowCreateModal(true)}
+                          disabled title="Campaign creation is not supported"
                           className="mt-[11px] h-[30px] px-[12px] border border-[#bcc0c4] bg-[#eceef0] hover:bg-[#e2e4e8] text-[#1c2b33] font-semibold text-[12px] rounded-[6px] transition-colors cursor-pointer"
                         >
                           Create ad
@@ -1297,13 +962,14 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                   filteredCampaigns.map((camp) => {
                     const isChecked = selectedIds.has(camp.id);
                     const isToggleOn = campaignToggles[camp.id] ?? true;
-                    const isInlineEditing = inlineEditingId === camp.id;
+
 
                     return (
                       <tr
+                        data-testid={`campaign-${camp.id}`}
                         key={camp.id}
                         className={`hover:bg-[#f2f4f8] transition-colors group ${
-                          isChecked ? "bg-blue-50/50" : ""
+                          isChecked || camp.id === campaignId ? "bg-blue-50/50" : ""
                         }`}
                       >
                         {/* Checkbox */}
@@ -1319,9 +985,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                         {/* On/Off Toggle */}
                         <td className="px-2 py-2 border-r border-[#e4e6eb]">
                           <button
-                            onClick={() =>
-                              setCampaignToggles((prev) => ({ ...prev, [camp.id]: !isToggleOn }))
-                            }
+                            disabled title="Status changes are not supported"
                             className={`w-8 h-4 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
                               isToggleOn ? "bg-[#0064e0]" : "bg-[#8a8d91]"
                             }`}
@@ -1360,16 +1024,15 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                           <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => {
-                                setInlineEditingId(camp.id);
-                                setInlineBudgetValue((camp.budgetMinor / 100).toFixed(2));
+                                openApprovals();
                               }}
                               className="text-[#0064e0] hover:underline cursor-pointer"
                             >
-                              Edit
+                              Review
                             </button>
                             <span>·</span>
                             <button
-                              onClick={handleDuplicateSelected}
+                              disabled title="Duplication is not supported"
                               className="text-[#0064e0] hover:underline cursor-pointer"
                             >
                               Duplicate
@@ -1384,7 +1047,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
 
                         {/* Results */}
                         <td className="px-2 py-2 text-right border-r border-[#e4e6eb] font-semibold text-[#1c1e21]">
-                          {camp.coursePurchases > 0 ? camp.coursePurchases : "—"}
+                          {camp.coursePurchases}
                         </td>
 
                         {/* Cost per result */}
@@ -1392,42 +1055,14 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
                           {camp.costPerCoursePurchase > 0 ? `£${(camp.costPerCoursePurchase / 100).toFixed(2)}` : "—"}
                         </td>
 
-                        {/* Budget */}
-                        <td className="px-2 py-2 text-right font-medium text-[#1c1e21]">
-                          {isInlineEditing ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <span>£</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                autoFocus
-                                value={inlineBudgetValue}
-                                onChange={(e) => setInlineBudgetValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleSaveInlineBudget(camp.id);
-                                  if (e.key === "Escape") setInlineEditingId(null);
-                                }}
-                                className="w-16 border border-blue-600 rounded px-1 text-right text-xs"
-                              />
-                              <button
-                                onClick={() => handleSaveInlineBudget(camp.id)}
-                                className="p-0.5 text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <span
-                              onClick={() => {
-                                setInlineEditingId(camp.id);
-                                setInlineBudgetValue((camp.budgetMinor / 100).toFixed(2));
-                              }}
-                              className="cursor-pointer hover:underline text-[#0064e0] font-semibold"
-                            >
-                              {money(camp.budgetMinor, "GBP")} / day
-                            </span>
-                          )}
-                        </td>
+                        <td className="px-2 py-2 text-right border-r">{money(camp.amountSpent,'GBP')}</td>
+                        <td className="px-2 py-2 text-right border-r">{camp.reach.toLocaleString('en-GB')}</td>
+                        <td className="px-2 py-2 text-right border-r">{camp.clicks.toLocaleString('en-GB')}</td>
+                        <td className="px-2 py-2 text-right border-r">{camp.ctr===null?'—':`${(camp.ctr*100).toFixed(2)}%`}</td>
+                        <td className="px-2 py-2 text-right border-r">{money(camp.conversionValue,'GBP')}</td>
+                        <td className="px-2 py-2 text-right border-r">{camp.amountSpent?`${camp.roas.toFixed(2)}×`:'—'}</td>
+                        {/* Approved budget is always read from MongoDB. */}
+                        <td className="px-2 py-2 text-right font-medium text-[#1c1e21] sticky right-0 bg-white"><button onClick={openApprovals} title="Review budget changes in Approvals" className="text-[#0064e0] font-semibold">{money(camp.budgetMinor, "GBP")} / day</button></td>
                       </tr>
                     );
                   })
@@ -1436,35 +1071,7 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
 
               {/* Dynamic Summary / Totals Row */}
               {!viewEmptyState && showResultsBar && (
-                <tfoot className="bg-white border-t-2 border-[#dadde1] sticky bottom-0 z-10 text-[13px] font-semibold text-[#1c1e21]">
-                  <tr>
-                    <td colSpan={4} className="px-4 py-3 border-r border-[#dadde1]">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-1 text-[#1c1e21] font-bold">
-                          <span>Results from {filteredCampaigns.length} campaigns</span>
-                          <Info className="w-3.5 h-3.5 text-zinc-500" />
-                        </div>
-                        <div
-                          onClick={() => setShowResultsBar(false)}
-                          className="flex items-center gap-1 text-[11px] text-[#0064e0] cursor-pointer hover:underline mt-0.5"
-                        >
-                          <EyeOff className="w-3 h-3" />
-                          <span>Hide results</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td colSpan={2} className="px-4 py-3 border-r border-[#dadde1] text-[11px] text-[#65676b]">
-                      {campaignTotals.totalReach.toLocaleString("en-GB")} impressions · {campaignTotals.totalSpent ? money(campaignTotals.totalSpent, "GBP") : money(0, "GBP")} spent
-                    </td>
-                    <td className="px-4 py-3 text-right border-r border-[#dadde1]">
-                      {campaignTotals.totalPurchases.toLocaleString("en-GB")} attributed orders
-                    </td>
-                    <td className="px-4 py-3 text-right border-r border-[#dadde1]">
-                      {campaignTotals.totalPurchases > 0 ? money(campaignTotals.costPerPurchase, "GBP") : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">{campaignTotals.avgRoas.toFixed(2)}× ROAS</td>
-                  </tr>
-                </tfoot>
+                <tfoot className="bg-white border-t text-xs"><tr><td colSpan={15} className="px-4 py-3">{filteredCampaigns.length} campaigns · Spend {money(campaignTotals.totalSpent,'GBP')} · {campaignTotals.totalReach.toLocaleString('en-GB')} impressions · {campaignTotals.totalPurchases} orders · Revenue {money(campaignTotals.totalConversionVal,'GBP')} · {campaignTotals.totalSpent?`${campaignTotals.avgRoas.toFixed(2)}× ROAS`:'ROAS unavailable'}</td></tr></tfoot>
               )}
             </table>
           )}
@@ -1486,11 +1093,13 @@ function MetaAdsManager({ campaignId }: { campaignId: string }) {
   );
 }
 
+function ScopedMeta({campaignId}:{campaignId:string}){const {runId}=useRun();return <MetaAdsManager key={`${runId}:${campaignId}`} campaignId={campaignId}/>;}
+
 export function MetaAdsManagerPage({ campaignId }: { campaignId: string }) {
   return (
     <Suspense fallback={<div data-meta-copy-page className="h-screen bg-[#f3f4f8] p-8"><PageSkeleton variant="campaign" label="Loading campaign workspace" /></div>}>
       <RunProvider>
-        <MetaAdsManager campaignId={campaignId} />
+        <ScopedMeta campaignId={campaignId} />
       </RunProvider>
     </Suspense>
   );

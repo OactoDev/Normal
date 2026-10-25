@@ -23,7 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         {children}
         <footer className="demo-disclaimer">
-          Nike names and imagery are used in an unaffiliated synthetic simulation. All metrics are derived from this selected run.
+          Nike names and imagery are used in an unaffiliated synthetic simulation. Operational metrics come from the selected run. The Shopify intro uses separate synthetic presentation fixtures.
         </footer>
       </body>
     </html>

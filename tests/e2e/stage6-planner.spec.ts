@@ -45,7 +45,7 @@ test("completed investigation generates strategies and saves a non-executed cano
   await expect(planner.getByTestId("planned-action").first()).toContainText("Approval required");
   view = await (await request.get(endpoint)).json();
   if (view.job.status !== "submitted") await planner.getByTestId("prepare-handoff").click();
-  await expect(planner.getByTestId("planning-handoff")).toContainText("approval integration pending");
+  await expect(planner.getByTestId("planning-handoff")).toContainText("ready for approval");
   await expect(planner.getByTestId("prepare-handoff")).toBeDisabled();
   const href = await planner.getByTestId("plan-handoff-link").getAttribute("href");
   const response = await request.get(href!); expect(response.ok()).toBe(true);

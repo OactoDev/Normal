@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { MetaAdsManagerPage } from "@/components/normal/MetaAdsManager";
+import { MetaAdsManagerPage } from "@/components/partner/MetaAdsManager";
 
 export const metadata: Metadata = {
   title: "Ads Manager · Nike Demo Account",

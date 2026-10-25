@@ -1,4 +1,5 @@
-import { ProposedPlan, type ProposedPlanT } from "@normal/contracts";
+import { canonicalPlan } from "@/planner/service";
+import { type ProposedPlanT } from "@normal/contracts";
 import type { ActionReceipt } from "@/adapters/_shared";
 import { readCampaign, readCampaigns } from "@/adapters/campaigns";
 import { campaignBreakdown, computeSnapshots } from "@/analytics/metrics";
@@ -52,14 +53,13 @@ export async function GET(request: Request, ctx: RouteContext<"/api/dev/simulato
     const actionIds = [...new Set(receipts.map((receipt) => receipt.actionId))];
     const daily = campaignDailyRows.find(([campaignId]) => campaignId === id)?.[1] ?? [];
     const planDocs = actionIds.length ? await db.collection<ProposedPlanT>(COLLECTIONS.plans).find({
-      businessId, "actions.actionId": { $in: actionIds },
+      businessId, simulationRunId, "actions.actionId": { $in: actionIds },
     }, { projection: { _id: 0 } }).limit(50).toArray() : [];
     const actionById = new Map<string, { agent: string; title: string; planId: string }>();
     for (const rawPlan of planDocs) {
-      const parsed = ProposedPlan.safeParse(rawPlan);
-      if (!parsed.success) continue;
-      for (const action of parsed.data.actions) {
-        if (actionIds.includes(action.actionId)) actionById.set(action.actionId, { agent: action.agent, title: action.title, planId: parsed.data.planId });
+      const plan = canonicalPlan(rawPlan);
+      for (const action of plan.actions) {
+        if (actionIds.includes(action.actionId)) actionById.set(action.actionId, { agent: action.agent, title: action.title, planId: plan.planId });
       }
     }
     const eventByAction = new Map(events.map((event) => [event.payload.actionId, event]));
@@ -81,10 +81,11 @@ export async function GET(request: Request, ctx: RouteContext<"/api/dev/simulato
       };
     }).sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
 
+    const comparison = await campaignBreakdown(businessId, simulationRunId, new Date(Date.parse(startAt) - (Date.parse(endAt)-Date.parse(startAt))).toISOString(), startAt, db);
     return Response.json({
       simulationRunId, window: { startAt, endAt }, campaign, campaigns,
       performance: performance.find((row) => row.campaignId === id) ?? null,
-      campaignPerformance: performance,
+      campaignPerformance: performance, comparison,
       daily,
       campaignDaily: Object.fromEntries(campaignDailyRows),
       actions: receiptActions.filter((action) => action.campaignId === id),

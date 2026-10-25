@@ -16,12 +16,12 @@ export async function GET(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const keys = (url.searchParams.get("keys") ?? "").split(",").map((k) => k.trim()).filter((k) => k.length >= 8).slice(0, 50);
     const db = await getDb();
-    const runId = await getActiveRunId(businessId, db);
+    const runId = new URL(request.url).searchParams.get("simulationRunId") ?? await getActiveRunId(businessId, db);
     if (!runId) return Response.json({ orders: [] });
     const filter: Filter<SimulatedOrder> = { businessId, simulationRunId: runId, origin: "demo_storefront", ...(keys.length ? { idempotencyKey: { $in: keys } } : {}) };
     const orders = await db.collection<SimulatedOrder>(COLLECTIONS.simulatedOrders).find(filter, { projection: { _id: 0 } }).sort({ placedAt: -1, orderId: -1 }).limit(20).toArray();
     const shipments = await db.collection<SimulatedShipment>(COLLECTIONS.simulatedShipments)
-      .find({ businessId, orderId: { $in: orders.map((o) => o.orderId) } }, { projection: { _id: 0, orderId: 1, status: 1, promisedAt: 1, shippedAt: 1, deliveredAt: 1, delayMinutes: 1 } }).toArray();
+      .find({ businessId, simulationRunId: runId, orderId: { $in: orders.map((o) => o.orderId) } }, { projection: { _id: 0, orderId: 1, status: 1, promisedAt: 1, shippedAt: 1, deliveredAt: 1, delayMinutes: 1 } }).toArray();
     const byOrder = new Map(shipments.map((s) => [s.orderId, s]));
     return Response.json({
       simulationRunId: runId,

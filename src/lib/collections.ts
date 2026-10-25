@@ -43,6 +43,11 @@ export const COLLECTIONS = {
   investigationReports: "investigation_reports",
   externalSources: "external_sources",
   planningJobs: "planning_jobs",
+  planApprovals: "plan_approvals",
+  agentRuns: "agent_runs",
+  agentMissions: "agent_missions",
+  actionExecutions: "action_executions",
+  actionOutcomes: "action_outcomes",
 } as const;
 
 let indexesReady: Promise<void> | undefined;

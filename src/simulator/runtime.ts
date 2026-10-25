@@ -146,7 +146,7 @@ async function releaseLock(d: Db, businessId: string, simulationRunId: string, t
   );
 }
 
-async function withRunLock<T>(d: Db, businessId: string, simulationRunId: string, fn: () => Promise<T>): Promise<T> {
+export async function withRunLock<T>(d: Db, businessId: string, simulationRunId: string, fn: () => Promise<T>): Promise<T> {
   const token = await acquireLock(d, businessId, simulationRunId);
   if (!token) throw new SimulatorError("Another simulator operation is in progress for this run", "run_locked", 409);
   try {

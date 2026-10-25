@@ -1,5 +1,6 @@
 export interface StoreProduct {
   productId: string;
+  images: Array<{src:string;alt:string}>;
   name: string;
   subtitle: string;
   category: string;

@@ -39,6 +39,7 @@ function Shell({ children, title, hidePageHeading = false }: { children: ReactNo
         </div> : null}
         {unavailable ? <div className="alert error">The dashboard uses development/demo endpoints; it is only available in development or a configured demo mode.</div> : null}
         {error ? <div className="alert error">{error}</div> : null}
+        <div className="row small" style={{marginBottom:16}}><Link href={withRun("/ads")}>Meta Ads Manager ↗</Link><Link href={withRun("/demo-store")}>Nike Storefront ↗</Link><Link href="/shopify">Shopify intro demo ↗</Link></div>
         {children}
       </main>
     </div>

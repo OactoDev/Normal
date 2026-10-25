@@ -1,3 +1,4 @@
+import { productImages } from "@/reference/product-images";
 import { readStorefront } from "@/adapters";
 import { COLLECTIONS } from "@/lib/collections";
 import { getDb } from "@/lib/mongodb";
@@ -15,7 +16,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const businessId = businessIdFrom(request);
     const db = await getDb();
-    const runId = await getActiveRunId(businessId, db);
+    const runId = new URL(request.url).searchParams.get("simulationRunId") ?? await getActiveRunId(businessId, db);
     const { products: catalogue, servedFrom } = await getReferenceCatalogue(db);
     const byRef = new Map(catalogue.map((c) => [c.referenceProductId, c]));
     if (!runId) {
@@ -30,6 +31,7 @@ export async function GET(request: Request): Promise<Response> {
       const ref = byRef.get(p.referenceProductId);
       return {
         productId: p.productId, name: p.name, subtitle: p.subtitle, category: p.category, priceMinor: p.priceMinor, currency: p.currency,
+        images: productImages(p.referenceProductId, ref?.styleCode, ref?.imageUrl),
         priceOrigin: p.priceOrigin, discountPercent: p.discountPercent, availableUnits: p.availableUnits, active: p.active,
         reference: ref ? { referenceProductId: ref.referenceProductId, sourceUrl: ref.sourceUrl, retrievedAt: ref.retrievedAt, dataOrigin: ref.dataOrigin, styleCode: ref.styleCode, description: ref.description } : null,
       };
