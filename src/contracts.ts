@@ -104,6 +104,7 @@ export const BusinessEventType = z.enum([
   "customer.message_sent",
   "storefront.banner_published",
   "promotion.created",
+  "support.ticket_created",
 ]);
 
 export const BusinessEvent = z.object({
@@ -316,6 +317,38 @@ export const ActionOutcome = z.object({
   observedAt: DateTime,
 }).strict();
 
+// What a whole plan changed: business metrics measured before execution and again after it, judged against
+// the plan's success criteria. The figures come from the simulator's event stream, not from the plan.
+export const CriterionResult = z.object({
+  metric: z.string().min(1),
+  direction: z.enum(["increase", "decrease"]),
+  before: z.number().nullable(),
+  after: z.number().nullable(),
+  changePercent: z.number().nullable(),
+  result: z.enum(["met", "not_met", "no_data"]),
+}).strict();
+
+export const PlanOutcome = z.object({
+  ...SchemaMeta,
+  planOutcomeId: Id,
+  planId: Id,
+  planVersion: z.number().int().positive(),
+  diagnosisId: Id,
+  diagnosedCause: RootCause,
+  diagnosisMubitRequestId: z.string().optional(),
+  diagnosisTaskFingerprint: z.string().optional(),
+  simulationRunId: Id,
+  scenario: z.string().min(1),
+  actionsTaken: z.array(z.object({ actionId: Id, actionType: z.string().min(1), status: ExecutionStatus }).strict()),
+  baseline: MetricSnapshot,
+  after: MetricSnapshot.optional(),
+  criteria: z.array(CriterionResult),
+  verdict: z.enum(["pending", "measuring", "resolved", "partially_resolved", "not_resolved", "inconclusive"]),
+  summary: z.string().min(1),
+  createdAt: DateTime,
+  measuredAt: DateTime.optional(),
+}).strict();
+
 // ---------------- Mubit Request Trace / Human Feedback / Adaptation ----------------
 export const ModelCall = z.object({
   ...SchemaMeta,
@@ -332,6 +365,7 @@ export const ModelCall = z.object({
   inputEvidenceIds: z.array(Id),
   mubitRequestId: z.string().optional(),
   appliedCorrectionIds: z.array(Id).optional(),
+  appliedOutcomeIds: z.array(Id).optional(),
   responseRecordId: Id.optional(),
   inputTokens: z.number().int().nonnegative().optional(),
   outputTokens: z.number().int().nonnegative().optional(),
@@ -488,6 +522,8 @@ export type PlanApprovalT = z.infer<typeof PlanApproval>;
 export type AgentMissionT = z.infer<typeof AgentMission>;
 export type ActionExecutionT = z.infer<typeof ActionExecution>;
 export type ActionOutcomeT = z.infer<typeof ActionOutcome>;
+export type PlanOutcomeT = z.infer<typeof PlanOutcome>;
+export type CriterionResultT = z.infer<typeof CriterionResult>;
 export type ModelCallT = z.infer<typeof ModelCall>;
 export type ModelCorrectionT = z.infer<typeof ModelCorrection>;
 export type AdapterRecordT = z.infer<typeof AdapterRecord>;

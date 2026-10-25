@@ -21,6 +21,7 @@
     "test:streaming": "tsx src/tests/mubit-streaming.test.ts",
     "test:documents": "tsx src/tests/static-documents.test.ts",
     "test:partner": "tsx src/tests/partner-integration.test.ts",
+    "test:outcomes": "tsx src/tests/outcome-measurement.test.ts",
     "mubit:replay": "tsx --env-file=.env scripts/mubit-replay.ts"
   },
   "dependencies": {

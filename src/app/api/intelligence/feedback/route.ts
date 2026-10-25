@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CorrectionError, SubmitCorrectionParams, feedbackPipeline } from "../../../../intelligence/feedback-pipeline";
 import { DIAGNOSIS_TASK_CONSOLE_NAME, diagnosisModel, diagnosisTaskFingerprint } from "../../../../intelligence/mubit-diagnoser";
 import { Evidence, RootCause } from "../../../../contracts";
+import { measuredOutcomes, outcomeEvaluation, outcomesForDiagnosis } from "../../../../execution/outcome-measurement";
 
 const CorrectionRequest = z.object({
   investigationId: z.string().min(1),
@@ -31,6 +32,10 @@ async function status() {
     },
     corrections: records,
     nextDiagnosisCorrectionIds: nextExamples.map(record => record.correction.correctionId),
+    // Mubit's outcome API isn't reachable with a gateway key, so measured plan results are kept here per task.
+    planOutcomes: (await measuredOutcomes()).slice(0, 10),
+    outcomeEvaluation: await outcomeEvaluation(),
+    nextDiagnosisOutcomeIds: (await outcomesForDiagnosis()).map(outcome => outcome.planOutcomeId),
   };
 }
 

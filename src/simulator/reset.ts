@@ -8,6 +8,7 @@ export async function resetDemo(planId: string) {
   if (execs.some(live)) throw new ToolError("EXECUTION_ACTIVE", "Wait for active work before resetting", false, false, 409);
   for (const e of execs) { await s.executions.remove(e.idempotencyKey); await s.details.remove(e.executionId); await s.outcomes.remove(e.executionId); }
   for (const r of await s.logs.find({planId})) await s.logs.remove(r.logId);
+  for (const r of await s.planOutcomes.find({planId})) await s.planOutcomes.remove(`${planId}:v${r.planVersion}`);
   for (const r of await s.missions.find({planId})) await s.missions.remove(r.missionId);
   for (const r of await s.approvals.find()) if (r.approval.planId === planId) await s.approvals.remove(r.approval.approvalId);
   for (const r of await s.approvalHeads.find({planId})) await s.approvalHeads.remove(`${planId}:v${r.planVersion}`);

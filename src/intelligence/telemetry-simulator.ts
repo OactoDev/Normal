@@ -7,6 +7,17 @@ import {
   RootCauseT,
 } from "../contracts";
 import { tickAds } from "../simulator/ads";
+import { emails, storefront } from "../store/repos";
+
+/** What Normal's agents have done since this simulation run began, which the simulated customers react to. */
+export interface Mitigations { delayNoticeSent: boolean; bannerLive: boolean }
+
+async function currentMitigations(since: string): Promise<Mitigations> {
+  const now = Date.now();
+  const sent = (await emails.find()).some(e => ["accepted", "delivered"].includes(e.status) && e.sentAt >= since);
+  const live = (await storefront.find()).some(b => b.active && b.publishedAt >= since && Date.parse(b.startsAt) <= now && Date.parse(b.expiresAt) > now);
+  return { delayNoticeSent: sent, bannerLive: live };
+}
 
 export interface SimulationState {
   run: SimulatorRunT;
@@ -90,6 +101,7 @@ export class TelemetrySimulator {
     const generated: BusinessEventT[] = [];
     const scenario = this.state.run.activeScenario;
     const severity = this.state.run.scenarioSeverity;
+    const mitigations = await currentMitigations(this.state.run.createdAt);
 
     for (let t = 0; t < ticks; t++) {
       // Advance virtual time by 15 minutes per tick
@@ -99,7 +111,7 @@ export class TelemetrySimulator {
       this.state.run.virtualTime = nextTime;
       this.state.run.updatedAt = nextTime;
 
-      const tickEvents = this.generateEventsForScenario(scenario, severity, nextTime);
+      const tickEvents = this.generateEventsForScenario(scenario, severity, nextTime, mitigations);
       generated.push(...tickEvents);
       generated.push(...await tickAds(nextTime, scenario === "ad_fatigue"));
     }
@@ -114,7 +126,8 @@ export class TelemetrySimulator {
   private generateEventsForScenario(
     scenario: string,
     severity: number,
-    time: string
+    time: string,
+    mitigations: Mitigations = { delayNoticeSent: false, bannerLive: false }
   ): BusinessEventT[] {
     const events: BusinessEventT[] = [];
     const idPrefix = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -160,8 +173,25 @@ export class TelemetrySimulator {
         });
       }
 
-      // Negative review due to shipping
-      events.push({
+      // Simulated customer response: delayed customers who heard nothing contact support and leave angry reviews.
+      // A delay email answers most of them; a store notice alone answers fewer. The carrier delay itself is unchanged.
+      const contactRate = mitigations.delayNoticeSent ? 0.15 : mitigations.bannerLive ? 0.4 : 0.6;
+      const tickets = Math.round(delayedCount * contactRate);
+      for (let i = 0; i < tickets; i++) {
+        events.push({
+          schemaVersion: 1,
+          eventId: `${idPrefix}_tkt_${i}`,
+          businessId: "nova_store",
+          occurredAt: time,
+          receivedAt: time,
+          source: "helpdesk",
+          type: "support.ticket_created",
+          payload: { ticketId: `tkt_${idPrefix}_${i}`, orderId: `ord_del_${i + 1}`, topic: "where_is_my_order" },
+        });
+      }
+
+      // Negative review due to shipping, from a customer who got no update
+      if (!mitigations.delayNoticeSent) events.push({
         schemaVersion: 1,
         eventId: `${idPrefix}_rev_01`,
         businessId: "nova_store",
@@ -238,4 +268,8 @@ export class TelemetrySimulator {
   }
 }
 
-export const telemetrySimulator = new TelemetrySimulator();
+// Next.js loads each route's modules separately, so a plain module-level instance would give the intelligence
+// routes and the plan routes different simulators. One instance per process keeps the scenario, its events and
+// the outcome measurement on the same stream.
+const shared = globalThis as typeof globalThis & { normalTelemetrySimulator?: TelemetrySimulator };
+export const telemetrySimulator = shared.normalTelemetrySimulator ??= new TelemetrySimulator();

@@ -89,7 +89,8 @@ async function happyPathAndIdempotency() {
   assert(emailOutcome.status === "monitoring", "email outcome is monitoring, not verified delivery");
   ok("Customer Care Agent: 2 messages accepted by provider; delivery not claimed");
 
-  const events = await store.events.find();
+  // The outcome measurement hour also records simulated ad observations; only the agents' own events count here.
+  const events = (await store.events.find()).filter(e => e.source === "normal_execution");
   const types = events.map(e => e.type).sort();
   assert(JSON.stringify(types) === JSON.stringify(["campaign.budget_updated", "customer.message_sent", "customer.message_sent", "storefront.banner_published"]), `events emitted: ${types}`);
   ok("simulated platforms emitted 4 business events");
@@ -97,7 +98,7 @@ async function happyPathAndIdempotency() {
   const attemptsBefore = snap.executions.map(e => e.attempts).join();
   const again = await execute("plan_001", approval.approvalId);
   assert((await store.emails.find({ planId: "plan_001" })).length === 2, "no duplicate emails");
-  assert((await store.events.find()).length === events.length, "no duplicate events");
+  assert((await store.events.find()).filter(e => e.source === "normal_execution").length === events.length, "no duplicate events");
   assert(again.executions.map(e => e.attempts).join() === attemptsBefore, "succeeded actions were not re-run");
   ok("executing twice re-runs nothing and sends no duplicate email");
 }

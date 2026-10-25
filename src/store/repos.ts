@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Repo } from "./db";
-import { PlanHandoff, PlanApproval, AgentMission, ActionExecution, ActionOutcome, BusinessEvent, CorrectionRecord, ModelCall } from "../contracts";
+import { PlanHandoff, PlanApproval, AgentMission, ActionExecution, ActionOutcome, PlanOutcome, BusinessEvent, CorrectionRecord, ModelCall } from "../contracts";
 export const handoffs = new Repo("plan_handoffs", PlanHandoff);
 export const ApprovalRecord = z.object({ approval: PlanApproval, _meta: z.object({ businessId: z.string(), expiresAt: z.string().datetime(), note: z.string().optional() }) }).strict();
 export type ApprovalRecordT = z.infer<typeof ApprovalRecord>;
@@ -9,6 +9,7 @@ export const approvalHeads = new Repo("approval_heads", z.object({ planId: z.str
 export const missions = new Repo("agent_missions", AgentMission);
 export const executions = new Repo("action_executions", ActionExecution);
 export const outcomes = new Repo("action_outcomes", ActionOutcome);
+export const planOutcomes = new Repo("plan_outcomes", PlanOutcome);
 export const Log = z.object({ logId: z.string(), planId: z.string(), executionId: z.string(), message: z.string(), at: z.string().datetime() }).strict();
 export const logs = new Repo("execution_logs", Log);
 export const Detail = z.object({ executionId: z.string(), planId: z.string(), payload: z.record(z.unknown()) }).strict();

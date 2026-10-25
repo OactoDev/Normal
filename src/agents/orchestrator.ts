@@ -8,6 +8,7 @@ import { reconcileDeliveries } from "../execution/delivery-monitor";
 import { ingestConfigured, retryFailedForwards } from "../partner/ingest-forwarder";
 import { ToolError, stepDelay } from "../execution/retry-policy";
 import { log } from "../execution/execute-action";
+import { captureBaseline, measurePlanOutcome } from "../execution/outcome-measurement";
 import { marketingAgent } from "./marketing-agent";
 import { customerCareAgent } from "./customer-care-agent";
 import { storefrontAgent } from "./storefront-agent";
@@ -43,7 +44,7 @@ class AgentOrchestrator {
     await this.sweepStale(id);
     const plan = await this.getPlan(id), executions = await this.getExecutions(id), approval = await this.getApproval(id);
     const note = approval && (await store.approvals.findOne(approval.approvalId))?._meta.note;
-    return { planId: id, planStatus: plan.status, needsAttention: executions.some(e => ["failed","cancelled"].includes(e.status)), approval, changeRequestNote: note ?? null, missions: await this.getMissions(id), executions, outcomes: await this.getOutcomes(id), emailSends: await store.emails.find({ planId: id }), details: await store.details.find({ planId: id }), logs: (await store.logs.find({ planId: id })).sort((a,b) => a.at.localeCompare(b.at)), partnerIngest: ingestConfigured() ? await store.ingestForwards.find({ planId: id }) : [] };
+    return { planId: id, planStatus: plan.status, needsAttention: executions.some(e => ["failed","cancelled"].includes(e.status)), approval, changeRequestNote: note ?? null, missions: await this.getMissions(id), executions, outcomes: await this.getOutcomes(id), emailSends: await store.emails.find({ planId: id }), details: await store.details.find({ planId: id }), planOutcome: (await store.planOutcomes.findOne(`${id}:v${plan.planVersion}`)) ?? null, logs: (await store.logs.find({ planId: id })).sort((a,b) => a.at.localeCompare(b.at)), partnerIngest: ingestConfigured() ? await store.ingestForwards.find({ planId: id }) : [] };
   }
   /** Ends an execution that never reached a terminal state, so the plan cannot hang on it. */
   async fail(execution: ActionExecutionT, from: ActionExecutionT["status"][], code: string, message: string, retryable: boolean) {
@@ -90,6 +91,8 @@ class AgentOrchestrator {
     }
     const queued = await this.snapshot(planId);
     if (queued.executions.some(e => e.status === "queued")) {
+      // The hour before anything runs is the baseline the plan's outcome is measured against.
+      await captureBaseline(h);
       h.plan.status = "executing"; await this.savePlan(h.plan);
       dispatch(() => this.drain(planId,approvalId,principal));
     } else if (targets.every(a => queued.executions.some(e => e.actionId === a.actionId && e.planVersion === h.plan.planVersion && e.status === "succeeded"))) {
@@ -154,6 +157,7 @@ class AgentOrchestrator {
         // Finished with failures: hand the plan back to its approved state so the owner can retry, rather than leaving it "executing".
         const status = executions.length && executions.every(e => e.status === "succeeded") ? "completed" : (await this.getApproval(planId))?.decision ?? latest.status;
         if (status !== "rejected") await this.savePlan({ ...latest, status });
+        await measurePlanOutcome(await storedHandoff(planId)).catch(e => console.error("[outcome-measurement]", e));
       }
     }
   }

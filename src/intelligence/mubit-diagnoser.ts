@@ -6,6 +6,7 @@ import {
   EvidenceT,
   InvestigationT,
   ModelCallT,
+  PlanOutcomeT,
   RootCause,
 } from "../contracts";
 import { saplingVerifier } from "./sapling-verifier";
@@ -40,7 +41,18 @@ export function diagnosisTaskFingerprint(model = diagnosisModel()) {
 /** Mubit names a task after the first words of its instructions in the console. */
 export const DIAGNOSIS_TASK_CONSOLE_NAME = DIAGNOSIS_INSTRUCTIONS.split(" ").slice(0, 6).join(" ");
 
-export function diagnosisRequest(evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], model = diagnosisModel(), apiKey?: string, stream = false) {
+// Measured results of earlier recovery plans: what was diagnosed, what the agents did and whether the targeted
+// metrics moved. Sent only when there are some, so calls without them keep the exact same user message as before.
+export function outcomeExamples(outcomes: PlanOutcomeT[]) {
+  return outcomes.slice(0, MAX_CORRECTION_EXAMPLES).map(outcome => ({
+    diagnosedCause: outcome.diagnosedCause,
+    actionsTaken: outcome.actionsTaken.filter(action => action.status === "succeeded").map(action => action.actionType),
+    measuredResult: outcome.verdict,
+    metrics: outcome.criteria.map(c => ({ metric: c.metric, wanted: c.direction, before: c.before, after: c.after, changePercent: c.changePercent, result: c.result })),
+  }));
+}
+
+export function diagnosisRequest(evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], model = diagnosisModel(), apiKey?: string, stream = false, outcomes: PlanOutcomeT[] = []) {
   // Temperature doesn't split a Mubit task. At 0 Gemini answers the same evidence the same way, which gives the
   // adapter one consistent answer to learn and be tested against.
   return mubitRequest({
@@ -57,18 +69,20 @@ export function diagnosisRequest(evidence: EvidenceT[], corrections: CorrectionR
           merchantVerifiedCause: record.correction.correctedCause,
           ...(record.correction.note ? { merchantNote: record.correction.note } : {}),
         })),
+        ...(outcomes.length ? { measuredOutcomesOfEarlierPlans: outcomeExamples(outcomes) } : {}),
       }),
   }, model, apiKey);
 }
 
 export class MubitDiagnoser {
   /** With onText, the answer streams through Mubit and each piece is passed on as it arrives; validation is the same. */
-  public async diagnose(investigation: InvestigationT, evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], onText?: (text: string) => void): Promise<DiagnosisExecutionResult> {
+  public async diagnose(investigation: InvestigationT, evidence: EvidenceT[], corrections: CorrectionRecordT[] = [], onText?: (text: string) => void, outcomes: PlanOutcomeT[] = []): Promise<DiagnosisExecutionResult> {
     const apiKey = process.env.MUBIT_API_KEY;
     if (!apiKey) throw new MubitDiagnosisError("MUBIT_NOT_CONFIGURED", "AI diagnosis is not configured. Please contact the demo owner.", 503);
     const model = diagnosisModel();
     const applied = corrections.slice(0, MAX_CORRECTION_EXAMPLES);
-    const request = diagnosisRequest(evidence, applied, model, apiKey, Boolean(onText));
+    const appliedOutcomes = outcomes.slice(0, MAX_CORRECTION_EXAMPLES);
+    const request = diagnosisRequest(evidence, applied, model, apiKey, Boolean(onText), appliedOutcomes);
     const started = Date.now();
     let response: Response;
     try {
@@ -114,6 +128,7 @@ export class MubitDiagnoser {
       modelKind: modelKindOf(reply.model, model), sessionId: investigation.investigationId,
       inputEvidenceIds: evidence.map(item => item.evidenceId), mubitRequestId: requestId,
       appliedCorrectionIds: applied.map(record => record.correction.correctionId),
+      appliedOutcomeIds: appliedOutcomes.map(outcome => outcome.planOutcomeId),
       inputTokens: reply.inputTokens, outputTokens: reply.outputTokens,
       latencyMs, createdAt: now,
     };

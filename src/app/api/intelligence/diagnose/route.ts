@@ -4,6 +4,7 @@ import { anomalyDetector } from "../../../../intelligence/anomaly-detector";
 import { evidenceCollector } from "../../../../intelligence/evidence-collector";
 import { MubitDiagnosisError, mubitDiagnoser } from "../../../../intelligence/mubit-diagnoser";
 import { feedbackPipeline } from "../../../../intelligence/feedback-pipeline";
+import { outcomesForDiagnosis } from "../../../../execution/outcome-measurement";
 import { Evidence, Investigation } from "../../../../contracts";
 import { z } from "zod";
 
@@ -34,6 +35,8 @@ export async function POST(request: NextRequest) {
     const parsedInvestigation = Investigation.parse(investigation);
     const parsedEvidence = z.array(Evidence).parse(evidence);
     const corrections = await feedbackPipeline.examplesForDiagnosis();
+    // Measured results of earlier plans ride along too, so Mubit sees which diagnoses led to fixes that worked.
+    const outcomes = await outcomesForDiagnosis();
 
     // ?stream=1: Gemini's answer streams through Mubit as server-sent events (delta pieces, then the validated
     // result or an error). The answer is only accepted after the same checks as the plain call.
@@ -45,7 +48,7 @@ export async function POST(request: NextRequest) {
           // Sent at once so the browser connects before Gemini's first words (it reasons first, which takes seconds).
           send("started", { model: "gemini-4-argon", route: "streamGenerateContent" });
           try {
-            send("result", await mubitDiagnoser.diagnose(parsedInvestigation, parsedEvidence, corrections, text => send("delta", { text })));
+            send("result", await mubitDiagnoser.diagnose(parsedInvestigation, parsedEvidence, corrections, text => send("delta", { text }), outcomes));
           } catch (err: any) {
             send("error", err instanceof MubitDiagnosisError
               ? { code: err.code, message: err.message, status: err.status, ...(err.requestId ? { requestId: err.requestId } : {}) }
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
       return new Response(body, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
     }
 
-    const result = await mubitDiagnoser.diagnose(parsedInvestigation, parsedEvidence, corrections);
+    const result = await mubitDiagnoser.diagnose(parsedInvestigation, parsedEvidence, corrections, undefined, outcomes);
     return NextResponse.json(result);
   } catch (err: any) {
     if (err instanceof MubitDiagnosisError) return NextResponse.json({ error: { code: err.code, message: err.message, ...(err.requestId ? { requestId: err.requestId } : {}) } }, { status: err.status });

@@ -440,6 +440,11 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               {modelCall.appliedCorrectionIds?.length
                 ? <>This Mubit call included <b>{modelCall.appliedCorrectionIds.length}</b> merchant-verified correction{modelCall.appliedCorrectionIds.length === 1 ? " as a labelled example" : "s as labelled examples"} (same Mubit task, same system prompt).</>
                 : <>No merchant corrections were included in this Mubit call.</>}
+              <span data-testid="outcomes-applied" className="block mt-1">
+                {modelCall.appliedOutcomeIds?.length
+                  ? <>It also included <b>{modelCall.appliedOutcomeIds.length}</b> measured outcome{modelCall.appliedOutcomeIds.length === 1 ? "" : "s"} of earlier recovery plans (what was diagnosed, what the agents did, whether the metrics moved).</>
+                  : <>No measured plan outcomes yet; they are added once an executed plan has been measured.</>}
+              </span>
               {correctedRun && modelCall.mubitRequestId !== correctedRun.requestId && (
                 <span data-testid="correction-before-after" className="block mt-1 font-mono text-[11px]">
                   Before correction: <b>{correctedRun.cause}</b> ({correctedRun.requestId}) <ArrowRight className="inline w-3 h-3" /> after: <b className={diagnosisData.output.primaryCause === correctedRun.cause ? "text-amber-700" : "text-emerald-700"}>{diagnosisData.output.primaryCause}</b> ({modelCall.mubitRequestId})
@@ -583,7 +588,7 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-slate-500 uppercase font-semibold">Mubit task</span>
               <p className="mt-1 text-slate-800">&ldquo;{learning.mubitTask.consoleName}&hellip;&rdquo;</p>
@@ -594,7 +599,17 @@ export function IntelligencePanel({ onPlanGenerated }: IntelligencePanelProps) {
               <span className="text-slate-500 uppercase font-semibold">Merchant corrections</span>
               <p className="mt-1 text-lg font-bold text-slate-900 font-mono" data-testid="corrections-count">{learning.corrections?.length || 0}</p>
               <p className="text-[11px] text-slate-500">{learning.nextDiagnosisCorrectionIds?.length || 0} will be included in the next diagnosis call.</p>
-              {modelCall && <p className="text-[11px] text-slate-500">Last call ({modelCall.mubitRequestId}) included {modelCall.appliedCorrectionIds?.length || 0}.</p>}
+              {modelCall && <p className="text-[11px] text-slate-500 break-all">Last call ({modelCall.mubitRequestId}) included {modelCall.appliedCorrectionIds?.length || 0}.</p>}
+            </div>
+            <div data-testid="outcome-evaluation" className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-slate-500 uppercase font-semibold">Measured plan outcomes</span>
+              {(() => {
+                const task = learning.outcomeEvaluation?.find((t: any) => t.fingerprint === learning.mubitTask.fingerprint);
+                return task
+                  ? <><p className="mt-1 text-lg font-bold text-slate-900 font-mono">{task.measured}</p><p className="text-[11px] text-slate-500">plans from this diagnosis task measured: {task.resolved} resolved · {task.partially_resolved} partly · {task.not_resolved} not{task.inconclusive ? ` · ${task.inconclusive} inconclusive` : ""}.</p></>
+                  : <p className="mt-1 text-slate-800">No executed plan has been measured yet.</p>;
+              })()}
+              <p className="text-[11px] text-slate-500">{learning.nextDiagnosisOutcomeIds?.length || 0} will be included in the next diagnosis call.</p>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-slate-500 uppercase font-semibold">Adapter</span>
