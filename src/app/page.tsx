@@ -75,8 +75,9 @@ export default function NormalOperationsCockpit() {
         </div>
         <nav className="flex h-full items-stretch gap-6 text-sm">{tabs.map(([t,label]) => <button key={t} onClick={()=>setTab(t)} className={`border-b-2 -mb-px flex items-center gap-2 ${tab===t ? "border-slate-900 text-slate-900 font-medium" : "border-transparent text-slate-500 hover:text-slate-900"}`}>{label}{t === "control" && isActive(data) && <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" aria-label="Agents running" />}</button>)}</nav>
         <div className="ml-auto flex items-center gap-4 text-sm">
-          <a href="/ads" className="text-slate-500 hover:text-slate-900">Ads Manager</a>
-          <a href="/store" className="text-slate-500 hover:text-slate-900">Store</a>
+          <a href="/shopify" className="text-slate-500 hover:text-slate-900 font-medium">Shopify Admin</a>
+          <a href="/ads" className="text-slate-500 hover:text-slate-900 font-medium">Ads Manager</a>
+          <a href="/store?ops=1" className="text-slate-500 hover:text-slate-900 font-medium">Storefront</a>
           <select aria-label="Principal" className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700" value={principal} onChange={e=>setPrincipal(e.target.value)}><option value="merchant_owner_01">Merchant owner</option><option value="ops_viewer">Ops viewer (read-only)</option></select>
         </div>
       </div>
